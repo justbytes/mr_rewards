@@ -1,0 +1,15 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+python-dotenv = "*"
+requests = "*"
+uvicorn = "*"
+fastapi = "*"
+pytelegrambotapi = "*"
+black = "*"
+pymongo = {extras = ["srv"], version = "==3.12"}
+
+[dev-packages]
