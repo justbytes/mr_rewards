@@ -1,0 +1,20 @@
+[
+  {
+    "name": "distribute",
+    "distributor": "CvgM6wSDXWCZeCmZnKRQdnh4CSga3UuTXwrCXy9Ju6PC",
+    "token_mint": "Ddm4DTxNZxABUYm2A87TFLY6GDG2ktM2eJhGZS3EbzHM",
+    "dev_wallet": "DwGucZwtBJBFzsnWikgbQ3AFgsibnbCDLpDC14JfsgAr"
+  },
+  {
+    "name": "tnt",
+    "distributor": "GVLwP2iR4sqEX9Tos3cmQQRqAumzRumxKD42qyCbCyCC",
+    "token_mint": "GcDnf5naWSQNwnZKLX4X44yHRYUJs6qZ6r1HD8KtBcNJ",
+    "dev_wallet": "GoPCMS8DSWZcBFoJYqknBrsuydVHUJveHXGRd2snoZJ"
+  },
+  {
+    "name": "iplr",
+    "distributor": "D8gKfTxnwBG3XPTy4ZT6cGJbz1s13htKtv9j69qbhmv4",
+    "token_mint": "EyzgnBfHGe9hh169B8993muBVcoeURCnSgPbddBeSybo",
+    "dev_wallet": "EftM2RPnZqLMc3UpE7Xjz41DdtAopYziCmB4r1wVAJ9C"
+  }
+]
