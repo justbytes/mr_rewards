@@ -15,7 +15,7 @@ def get_projects():
     try:
         # Make request to the API
         url = f"{os.getenv('API_URL')}/projects"
-        response = requests.get(url, timeout=30)
+        response = requests.get(url)
 
         # Parse the response
         if response.status_code == 200:
@@ -30,10 +30,6 @@ def get_projects():
     # Throw an error if server has lost connection
     except requests.exceptions.ConnectionError:
         raise ConnectionError("Could not connect to rewards server")
-
-    # Timeout
-    except requests.exceptions.Timeout:
-        raise TimeoutError("Request timed out")
 
     except Exception as e:
         raise Exception(f"An error occurred: {str(e)}")
