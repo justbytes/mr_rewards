@@ -4,9 +4,20 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
+from db import insert_wallet_transfer, insert_supported_project
 
 # Load in env vars
 load_dotenv()
+
+# This can be used to add projects to the supported projects collection
+def add_projects():
+    data_dir = Path("./data")
+    projects_file =  data_dir / "projects.json"
+    with open(projects_file, 'r') as f:
+        projects = json.load(f)
+
+    for project in projects:
+        insert_supported_project(project)
 
 # This will be used to get all the transactions for the distribute protocol
 def get_distributor_transactions(distributor):
@@ -76,9 +87,10 @@ def get_distributor_transactions(distributor):
     organize_transfers(txs, distributor)
 
 
-# Organizes txs creating seperate dirs and files by recipient wallets
+# Organizes txs and saves to MongoDB
 def organize_transfers(transaction_data, distributor):
-    wallets_dir = Path("./data/wallets")
+    transfer_count = 0
+    error_count = 0
 
     # Loop through each transaction
     for transaction in transaction_data:
@@ -118,17 +130,9 @@ def organize_transfers(transaction_data, distributor):
 
         # Loop through the transfers
         for transfer in transfers:
-            # Get the recipient and amount recieved
+            # Get the recipient and amount received
             to_account = transfer.get('toUserAccount')
             amount = transfer.get('amount')
-
-            # Create recipient directory if it doesn't exist
-            recipient_dir = wallets_dir / to_account
-            if not recipient_dir.exists():
-                recipient_dir.mkdir()
-
-            # Define file path for the feePayer JSON
-            fee_payer_file = recipient_dir / f"{fee_payer}.json"
 
             # Prepare transfer data
             transfer_data = {
@@ -139,28 +143,18 @@ def organize_transfers(transaction_data, distributor):
                 'token': token
             }
 
-            # Update existing file or create new one
-            if fee_payer_file.exists():
-                # Load existing data
-                with open(fee_payer_file, 'r') as f:
-                    existing_data = json.load(f)
+            # Insert into MongoDB
+            success = insert_wallet_transfer(to_account, fee_payer, transfer_data)
 
-                # Append new transfer
-                if isinstance(existing_data, list):
-                    existing_data.append(transfer_data)
-                else:
-                    # Handle case where file exists but isn't a list
-                    existing_data = [existing_data, transfer_data]
-
-                # Write updated data
-                with open(fee_payer_file, 'w') as f:
-                    json.dump(existing_data, f, indent=2)
+            if success:
+                transfer_count += 1
             else:
-                # Create new file with transfer data as a list
-                with open(fee_payer_file, 'w') as f:
-                    json.dump([transfer_data], f, indent=2)
+                error_count += 1
+                print(f"Failed to insert transfer for wallet {to_account} from transaction {signature}")
 
-    print(f"Data organization complete. Check the './data/wallets' directory for results.")
+    print(f"Data organization complete. Inserted {transfer_count} transfers to MongoDB.")
+    if error_count > 0:
+        print(f"Encountered {error_count} errors during insertion.")
 
 
 # NOTE: Still testing this one
@@ -244,4 +238,4 @@ def main():
 
 # Run the program
 if __name__ == "__main__":
-    main()
+    add_projects()

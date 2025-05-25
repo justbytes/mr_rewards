@@ -11,18 +11,33 @@ load_dotenv()
 
 # Get projects info
 def get_projects():
-    # Get project names and distributor addresses
-    # NOTE: This should call to the db to get the projects data
-    data_dir = Path("./data")
-    projects_file = data_dir / "projects.json"
     result = {}
-    with open(projects_file, "r") as f:
-        projects = json.load(f)
+    try:
+        # Make request to the API
+        url = f"{os.getenv('API_URL')}/projects"
+        response = requests.get(url, timeout=30)
 
-        for project in projects:
-            result[project['name']] = project['distributor']
+        # Parse the response
+        if response.status_code == 200:
+            projects = response.json()
 
-    return result
+            for project in projects:
+                result[project['name']] = project['distributor']
+            return result
+        else:
+            raise Exception(f"API returned status code: {response.status_code}")
+
+    # Throw an error if server has lost connection
+    except requests.exceptions.ConnectionError:
+        raise ConnectionError("Could not connect to rewards server")
+
+    # Timeout
+    except requests.exceptions.Timeout:
+        raise TimeoutError("Request timed out")
+
+    except Exception as e:
+        raise Exception(f"An error occurred: {str(e)}")
+
 
 # Spins up the Mrt Rewards telegram bot
 def start_bot():
@@ -36,12 +51,18 @@ def start_bot():
 
     # Welcome message
     @bot.message_handler(commands=["start", "help"])
+
+    # Display the main menu
     def start(message):
         markup = types.InlineKeyboardMarkup()
 
-        response_text = "⎑⎑⎑ Mr. Rewards ⎑⎑⎑\n"
-        response_text += "---------------------\n"
-        response_text += "Select an option:"
+        response_text = "Mr. Rewards\n\n"
+        response_text += "Instructions: \n"
+        response_text += "1. Click 'See Rewards' or enter /rewards\n"
+        response_text += "2. Select an one of the projects from the list\n"
+        response_text += "3. Enter your wallet address and press enter\n"
+        response_text += "4. See total rewards recieved from the project\n"
+
 
         button = types.InlineKeyboardButton(
             text="See Rewards",
@@ -120,7 +141,15 @@ def start_bot():
         # Set the next step handler to wait for wallet address
         bot.register_next_step_handler(call.message, process_wallet_address, project_name)
 
+        # Tells the user that they used an unkown command
 
+
+    # Fallback for unknown commands
+    @bot.message_handler(func=lambda message: True)
+    def handle_unknown_command(message):
+        bot.reply_to(message, "Unknown command. Use /help to go back to the main menu!")
+
+    # Makes the api call to get the rewards for a wallet
     def process_wallet_address(message, project_name):
         wallet_address = message.text.strip()
         distributor_address = projects[project_name]
@@ -137,7 +166,7 @@ def start_bot():
 
         try:
             # Make request to the API
-            url = f"http://localhost:8000/rewards/{wallet_address}/{distributor_address}"
+            url = f"{os.getenv('API_URL')}/rewards/{wallet_address}/{distributor_address}"
             response = requests.get(url, timeout=30)
 
             # Parse the response
@@ -199,13 +228,6 @@ def start_bot():
 
         # send the user the data
         bot.send_message(message.chat.id, response_text, parse_mode="Markdown")
-
-
-    # Tells the user that they used an unkown command
-    @bot.message_handler(func=lambda message: True)
-    def handle_unknown_command(message):
-        bot.reply_to(message, "Unknown command. Use /help to go back to the main menu!")
-
 
     # Activates the bot
     bot.infinity_polling()
