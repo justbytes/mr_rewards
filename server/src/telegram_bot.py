@@ -35,7 +35,7 @@ def get_projects():
         raise Exception(f"An error occurred: {str(e)}")
 
 
-# Spins up the Mrt Rewards telegram bot
+# Spins up the Mr Rewards telegram bot
 def start_bot():
 
     # Create the instance
@@ -136,8 +136,6 @@ def start_bot():
 
         # Set the next step handler to wait for wallet address
         bot.register_next_step_handler(call.message, process_wallet_address, project_name)
-
-        # Tells the user that they used an unkown command
 
 
     # Fallback for unknown commands
