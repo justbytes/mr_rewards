@@ -6,6 +6,17 @@ Rewards/Tax/Ponzi tokens on Solana have built-in functionality to send holders r
 
 To use this app download Telegram and add @mr_rewards_bot. Click start and you will then be able to interact with the bot and the api.
 
+Currently we are in the MVP stage and only have 100 transactions for the distribute project and you can test it with this address if you wish `1JqsvoXbb97qV3UhAJY65TKGsRHjruSdgyQHFxQ1XSu`
+
+### Supported Projects
+
+Currently supporting the following project with more to come.
+
+- Distribute - In progress
+- TNT - In progress
+- IPLR - In progress
+
+
 ## Steps to test locally
 
 Start by cloning the repo.
@@ -14,9 +25,10 @@ Start by cloning the repo.
 
 Make sure you have pipenv installed on your machine
 
+Activate virtual enviorment: `pipenv shell`
+
 Install dependencies: `pipenv install`
 
-Activate virtual enviorment: `pipenv shell`
 
 ### To get fresh data - OPTIONAL:
 To run locally this will requires a Helius RPC url which can be found [here](https://www.helius.dev/). Create an account then navigate to the endpoints tab to find the HTTPS RPC url. Copy it and then paste it into the .env file using the example-env file for reference.
@@ -45,6 +57,7 @@ python3 server/src/telegram_bot.py
 ```
 
 ## Tech
+- Render
 - Helius
 - MongoDB
 - pymongo
