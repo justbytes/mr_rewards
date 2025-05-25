@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import json
 from typing import List, Dict, Any, Optional
+from db import get_wallet_transfers_by_distributor, wallet_has_transfers_from_distributor
 
 # Gets the total rewards for given wallet address and distributor address
 def get_total_rewards(target_wallet: str, distributor_address: str) -> Dict[str, Any]:
@@ -14,37 +15,23 @@ def get_total_rewards(target_wallet: str, distributor_address: str) -> Dict[str,
         'error': None
     }
 
-    # NOTE: Some of this will need to be changed when we hook up the db
-
-    # Path to wallets
-    wallets_dir = Path(f"./data/wallets")
-
     try:
-        # Check if wallets directory exists
-        if not wallets_dir.exists():
-            result['error'] = "Wallets directory does not exist"
-            return result
-
-        # Check if target wallet directory exists
-        wallet_dir = wallets_dir / target_wallet
-        if not wallet_dir.exists():
-            result['error'] = f"Wallet directory for {target_wallet} not found"
-            return result
-
-        # Check if distributor file exists for this wallet
-        distributor_file = wallet_dir / f"{distributor_address}.json"
-        if not distributor_file.exists():
+        # Check if wallet has any transfers from this distributor
+        if not wallet_has_transfers_from_distributor(target_wallet, distributor_address):
             result['error'] = f"No rewards found from distributor {distributor_address} for wallet {target_wallet}"
             return result
 
-        # Read and parse the distributor file
-        with open(distributor_file, 'r') as f:
-            transfer_data = json.load(f)
+        # Get all transfers for this wallet from this distributor via mongodb
+        transfer_data = get_wallet_transfers_by_distributor(target_wallet, distributor_address)
+
+        if not transfer_data:
+            result['error'] = f"No transfer data found for wallet {target_wallet} from distributor {distributor_address}"
+            return result
 
         # Dictionary to track totals by token type
         token_totals = {}
 
-        # Loop through the wallets transactions
+        # Loop through the wallet's transactions
         for transfer in transfer_data:
             # Get amount and token type
             amount = transfer.get('amount', 0)
@@ -66,12 +53,12 @@ def get_total_rewards(target_wallet: str, distributor_address: str) -> Dict[str,
                 token_totals['sol']['total_amount'] += sol_amount
                 token_totals['sol']['raw_amount'] += amount
             else:
-                # We should make another helius call using the sig to get tx detals
+                # We should make another helius call using the sig to get tx details
                 # From the sig we can get the token account data and get the decimals
                 # and the ticker for the token which will then be used to get the total
                 #
-                # NOTE: This should probably just be done during the intial data fetch
-                #       and the the decimals and ticker should be saved to file as well
+                # NOTE: This should probably just be done during the initial data fetch
+                #       and the decimals and ticker should be saved to file as well
                 print("SPL tokens not yet supported!")
                 continue
 
@@ -94,9 +81,6 @@ def get_total_rewards(target_wallet: str, distributor_address: str) -> Dict[str,
 
         return result
 
-    except json.JSONDecodeError as e:
-        result['error'] = f"Error decoding JSON file: {e}"
-        return result
     except Exception as e:
         result['error'] = f"Unexpected error: {e}"
         return result
