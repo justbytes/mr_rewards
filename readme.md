@@ -5,8 +5,9 @@
 Rewards/Tax/Ponzi tokens on Solana have built-in functionality to send holders rewards at set time intervals (5 mins - multiple hours). This project works to track the transactions coming from the distribution wallets of the tokens and record the amounts sent to each wallet. The data collected will power an API holders can access via a custom Telegram bot or website, displaying the aggregated rewards received across different projects.
 
 ## 🌐 Live Demo
-[View Live Application](https://t.me/mr_rewards_bot)
-Deployed via Render
+[View Live Application](https://t.me/mr_rewards_bot) Deployed via Render
+
+[Watch demo](https://youtu.be/Lp5Po5CnkD0)
 
 ## ✨ Features
 **Real-time Reward Tracking**
