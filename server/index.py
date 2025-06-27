@@ -7,9 +7,9 @@ import json
 from typing import List, Dict, Any, Optional
 import uvicorn
 from contextlib import asynccontextmanager
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
-from token_aggregator import get_total_rewards
-from db import get_all_wallets, get_distributors_for_wallet, initialize_db_connection, get_supported_projects
+
+from utils.token_aggregator import get_total_rewards
+from db.db import get_all_wallets, get_distributors_for_wallet, initialize_db_connection, get_supported_projects
 
 
 """
