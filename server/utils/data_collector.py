@@ -5,8 +5,6 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 from db import insert_wallet_transfer, insert_supported_project
-
-# Load in env vars
 load_dotenv()
 
 # This can be used to add projects to the supported projects collection
