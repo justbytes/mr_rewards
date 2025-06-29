@@ -339,20 +339,26 @@ class MongoDB:
                 collection.create_index("token_transfers.tokenAmount")
                 collection.create_index("token_transfers.mint")
 
-            #rewards_wallets_collection = self._db.rewards_wallets
+
+            # Get the collections from DB
+            rewards_wallets_collection = self._db.rewards_wallets
             supported_projects_collection = self._db.supported_projects
             known_tokens_collection = self._db.known_tokens
 
-            # Indexs for supported projects
+            # Supported projects collection indexes
             supported_projects_collection.create_index("token_mint", unique=True)
+
+            # Known tokens collection indexes
             known_tokens_collection.create_index("mint", unique=True)
 
-            # Indexs for rewards wallet collection
-            # rewards_wallets_collection.create_index("signature", unique=True)
-            # rewards_wallets_collection.create_index([("wallet_address", 1), ("distributor", 1)])
-            # rewards_wallets_collection.create_index("wallet_address")
-            # rewards_wallets_collection.create_index("distributor")
-            # rewards_wallets_collection.create_index("timestamp")
+            # Rewards wallets collencion indexes
+            rewards_wallets_collection.create_index([ ("wallet_address", 1), ("distributor", 1),("signature", 1),("slot", 1), ("timestamp", 1),("token", 1), ("amount",1)], unique=True)
+            rewards_wallets_collection.create_index([("wallet_address", 1), ("distributor", 1)])
+            rewards_wallets_collection.create_index("signature")
+            rewards_wallets_collection.create_index("wallet_address")
+            rewards_wallets_collection.create_index("distributor")
+            rewards_wallets_collection.create_index("timestamp")
+            rewards_wallets_collection.create_index("slot")
 
             print("Database indexes created successfully")
             return True

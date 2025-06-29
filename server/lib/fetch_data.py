@@ -9,21 +9,18 @@ load_dotenv()
 
 
 # Creates individual wallet files with their transfer data.
-def organize_transfers_by_wallet(transfers, distributor):
-
-    # print(len(transfers))
+def organize_transfers_by_wallet(transfers, distributor, batch_size=1000):
+    tx_count = 0
     transfer_count = 0
     error_count = 0
+    total_transfers = []
 
     # Get a connection to DB
-    db = _get_db_instance()
+    db = get_db_instance()
 
     # Rais an error if we failed to connect
     if db is None:
         raise Exception("Couldn't connect to DB")
-
-    known_tokens = db.get_known_tokens()
-    total_transfers = []
 
     # Loop through each transaction
     for tf in transfers:
@@ -35,14 +32,14 @@ def organize_transfers_by_wallet(transfers, distributor):
 
         # Loop throught the token two lists and
 
-
         # Native sol transfers list
         if len(native_transfers) > 0:
             for t in native_transfers:
                 to_user_account = t.get("toUserAccount")
-                amount = t.get("amount") * 1e9
+                amount = t.get("amount") / 1e9
                 token = "sol"
 
+                # Add the document to the list
                 total_transfers.append({
                     "signature": signature,
                     "slot": slot,
@@ -52,14 +49,18 @@ def organize_transfers_by_wallet(transfers, distributor):
                     "wallet_address": to_user_account,
                     "distributor": distributor,
                 })
+                transfer_count += 1
 
         # SPL transfers list
         if len(token_transfers) > 0:
             for t in token_transfers:
                 to_user_account = t.get("toUserAccount")
                 amount = t.get("tokenAmount")
-                token = get_token_symbol(t.get('mint'), known_tokens)
 
+                # Get the symbol from the known token list
+                token = get_token_symbol(t.get('mint'), db)
+
+                # Add the document to the list
                 total_transfers.append({
                     "signature": signature,
                     "slot": slot,
@@ -69,14 +70,26 @@ def organize_transfers_by_wallet(transfers, distributor):
                     "wallet_address": to_user_account,
                     "distributor": distributor,
                 })
+                transfer_count += 1
 
-    print(len(total_transfers))    # Save to individual wallet file
-    db.insert_rewards_wallet_batch(total_transfers)
+        # Check if we have hit the batch size and then insert to db
+        if len(total_transfers) >= batch_size:
+            db.insert_rewards_wallet_batch(total_transfers)
+            total_transfers = []
+
+        tx_count += 1
+        print(f"Transaction: {tx_count}/{len(transfers)} Total transfers: {transfer_count}")
+
+    # Add any left over transfers to db
+    if len(total_transfers) > 0:
+        db.insert_rewards_wallet_batch(total_transfers)
+
+    print("Updated rewards wallet collection complete")
 
 """""
 Gets an instance of the MongoDB
 """""
-def _get_db_instance():
+def get_db_instance():
     try:
         db = MongoDB()
         return db
@@ -87,9 +100,7 @@ def _get_db_instance():
 """""
 Fetches token metadata, adds it to the list of known tokens in DB, and returns the symbol of the token added
 """""
-def get_and_add_token_metadata(mint_address):
-    # Get a connection to DB
-    db = _get_db_instance()
+def get_and_add_token_metadata(mint_address, db):
 
     # Payload for the helius getAssets endpoint
     payload = {
@@ -143,12 +154,13 @@ def get_and_add_token_metadata(mint_address):
 """""
 Checks if the token is known and if it isn't then we add it to the DB
 """""
-def get_token_symbol(mint_address, known_tokens):
+def get_token_symbol(mint_address, db):
+    known_tokens = db.get_known_tokens()
     for t in known_tokens:
         if mint_address.lower() == str(t.get("mint")).lower():
             return t.get("symbol")
 
-    return get_and_add_token_metadata(mint_address)
+    return  get_and_add_token_metadata(mint_address, db)
 
 
 
