@@ -1,45 +1,21 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+
 import sys
 import os
-from pathlib import Path
 import json
-from typing import List, Dict, Any, Optional
 import uvicorn
+from pathlib import Path
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
-
 from utils.token_aggregator import get_total_rewards
-from db.db import get_all_wallets, get_distributors_for_wallet, initialize_db_connection, get_supported_projects
+from db.MongoDB import MongoDB
 
 
 """
-    This file contains a basic server using the FastAPI library and includes 4 routes:
-    /health, /rewards/{wallet}/{distributor}, /wallets/, /wallets/{wallet_address}/distributors
+This file contains a basic server using the FastAPI library and includes 4 routes:
+/health, /rewards/{wallet}/{distributor}, /wallets/, /wallets/{wallet_address}/distributors
 """
-
-# Lifespan event handle
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Initialize the db connection
-    print("Starting up the API...")
-    if initialize_db_connection():
-        print("Database connected successfully")
-    else:
-        print("Warning: Database connection failed")
-
-    yield
-
-    print("Shutting down the API...")
-
-
-# Initialize the app
-app = FastAPI(
-    title="Wallet Rewards Aggergator API",
-    description="API to retrieve aggregated rewards recieved from distribution wallets",
-    version="1.0.0",
-    lifespan=lifespan
-)
-
 
 # A model for how the total_amounts data
 class RewardAmount(BaseModel):
@@ -65,13 +41,11 @@ class WalletsResponse(BaseModel):
     wallets: List[str]
     count: int
 
-
 # Model for the distributors route
 class DistributorsResponse(BaseModel):
     wallet: str
     distributors: List[str]
     count: int
-
 
 # Model for the root response
 class RootResponse(BaseModel):
@@ -79,11 +53,62 @@ class RootResponse(BaseModel):
     version: str
     endpoints: Dict[str, str]
 
+# Global MongoDB instance
+db_instance = None
+
+# Check if we already have a mongoDB connection
+def get_db() -> MongoDB:
+    """Get the global MongoDB instance"""
+    global db_instance
+    if db_instance is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+    return db_instance
+
+# Initialize the connection to the MongoDB and asign it the global variable
+def initialize_db_connection() -> bool:
+    """Initialize the global database connection"""
+    global db_instance
+    try:
+        db_instance = MongoDB()
+        return True
+    except Exception as e:
+        print(f"Database connection failed: {e}")
+        return False
+
+# Lifespan event handler
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize the db connection
+    print("Starting up the API...")
+    if initialize_db_connection():
+        print("Database connected successfully")
+    else:
+        print("Warning: Database connection failed")
+
+    # Initialize Telegram bot
+    # TODO initalize telegram bot here
+    yield
+
+    print("Shutting down the API...")
+    # Optionally close the database connection here
+    global db_instance
+    if db_instance:
+        # db_instance.close()
+        db_instance = None
+
+
+# Initialize the app
+app = FastAPI(
+    title="Mr. Rewards | Solana Rewards Token Tracker",
+    description="API to retrieve aggregated rewards received from distribution wallets",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # API Routes
 @app.get("/")
-# Root endpoint with API information
 async def root():
+    """Root endpoint with API information"""
     return {
         "message": "Wallet Rewards API",
         "version": "1.0.0",
@@ -92,23 +117,22 @@ async def root():
             "get_rewards": "/rewards/{wallet_address}/{distributor_address}",
             "wallets": "/wallets",
             "wallets_distributors": "/wallets/{wallet_address}/distributors",
+            "supported_projects": "/supported_projects",
+            "known_tokens": "/known_tokens",
             "docs": "/docs",
-            "openapi": "/openapi.json",
         },
     }
 
 
-# Sever helper function that checks if everything is working
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
+    """Server helper function that checks if everything is working"""
     return {"status": "healthy", "message": "API is running"}
 
 
-# Route for getting total rewards for a specific wallet from a specific distributor
-@app.get(
-    "/rewards/{wallet_address}/{distributor_address}", response_model=RewardsResponse
-)
+@app.get("/rewards/{wallet_address}/{distributor_address}", response_model=RewardsResponse)
 async def get_wallet_rewards(wallet_address: str, distributor_address: str):
+    """Route for getting total rewards for a specific wallet from a specific distributor"""
     try:
         # Call the get_total_rewards function
         result = get_total_rewards(wallet_address, distributor_address)
@@ -124,41 +148,54 @@ async def get_wallet_rewards(wallet_address: str, distributor_address: str):
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
-# A route that lists available wallets / wallets that have recieved rewards
-# NOTE: This will change whe we add the db and not result.get("found")
-@app.get("/wallets")
+@app.get("/wallets", response_model=WalletsResponse)
 async def list_wallets():
+    """A route that lists available wallets / wallets that have received rewards"""
     try:
-
-        return get_all_wallets()
+        db = get_db()
+        return db.get_all_wallets()
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error listing wallets: {str(e)}")
 
 
-# This route gets a list of distribotrs for a given wallet
-# NOTE: This will change whe we add the db
-@app.get("/wallets/{wallet_address}/distributors")
+@app.get("/wallets/{wallet_address}/distributors", response_model=DistributorsResponse)
 async def list_distributors_for_wallet(wallet_address: str):
+    """This route gets a list of distributors for a given wallet"""
     try:
-        return get_distributors_for_wallet(wallet_address)
+        db = get_db()
+        return db.get_distributors_for_wallet(wallet_address)
 
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error listing distributors: {str(e)}"
         )
 
-# Gets the list of supported projects
-@app.get("/projects")
+
+@app.get("/supported_projects")
 async def list_supported_projects():
+    """Gets the list of supported projects"""
     try:
-        return get_supported_projects()
+        db = get_db()
+        return db.get_supported_projects()
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error listing supported projects: {str(e)}"
         )
 
+@app.get("/known_tokens")
+async def get_known_tokens():
+    """Gets the list of supported projects"""
+    try:
+        db = get_db()
+        return db.get_known_tokens()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error getting known tokens: {str(e)}"
+        )
+
 
 # Starts the server
 if __name__ == "__main__":
+    # Start the FastAPI
     uvicorn.run(app, host="0.0.0.0", port=8000)
