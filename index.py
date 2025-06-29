@@ -9,11 +9,16 @@ from pathlib import Path
 
 
 def main():
+
    db = MongoDB()
 
-   transfers = db.get_project_transfers("BoonAKjwqfxj3Z1GtZHWeEMnoZLqgkSFEqRwhRsz4oQ")
+   # db.create_indexes()
 
-   organize_transfers_by_wallet(transfers, "BoonAKjwqfxj3Z1GtZHWeEMnoZLqgkSFEqRwhRsz4oQ")
+   distributor = "D8gKfTxnwBG3XPTy4ZT6cGJbz1s13htKtv9j69qbhmv4"
+
+   transfers = db.get_project_transfers(distributor)
+
+   organize_transfers_by_wallet(transfers, distributor)
 
 
 
