@@ -9,7 +9,9 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 from utils.token_aggregator import get_total_rewards
-from db.MongoDB import MongoDB
+from utils.models import *
+from lib.Controller import Controller
+
 
 
 """
@@ -17,59 +19,16 @@ This file contains a basic server using the FastAPI library and includes 4 route
 /health, /rewards/{wallet}/{distributor}, /wallets/, /wallets/{wallet_address}/distributors
 """
 
-# A model for how the total_amounts data
-class RewardAmount(BaseModel):
-    token: str
-    total_amount: float
-    raw_amount: int
-    decimals: int
-
-# A model for the response of the get_total_rewards function
-class RewardsResponse(BaseModel):
-    found: bool
-    total_amounts: List[RewardAmount]
-    transfer_count: int
-    error: Optional[str] = None
-
-# Model for the health route response
-class HealthResponse(BaseModel):
-    status: str
-    message: str
-
-# Model for the wallets route response
-class WalletsResponse(BaseModel):
-    wallets: List[str]
-    count: int
-
-# Model for the distributors route
-class DistributorsResponse(BaseModel):
-    wallet: str
-    distributors: List[str]
-    count: int
-
-# Model for the root response
-class RootResponse(BaseModel):
-    message: str
-    version: str
-    endpoints: Dict[str, str]
 
 # Global MongoDB instance
-db_instance = None
-
-# Check if we already have a mongoDB connection
-def get_db() -> MongoDB:
-    """Get the global MongoDB instance"""
-    global db_instance
-    if db_instance is None:
-        raise HTTPException(status_code=503, detail="Database not available")
-    return db_instance
+controller = None
 
 # Initialize the connection to the MongoDB and asign it the global variable
-def initialize_db_connection() -> bool:
+def initialize_controller():
     """Initialize the global database connection"""
-    global db_instance
+    global controller
     try:
-        db_instance = MongoDB()
+        controller = Controller()
         return True
     except Exception as e:
         print(f"Database connection failed: {e}")
@@ -80,7 +39,7 @@ def initialize_db_connection() -> bool:
 async def lifespan(app: FastAPI):
     # Initialize the db connection
     print("Starting up the API...")
-    if initialize_db_connection():
+    if initialize_controller():
         print("Database connected successfully")
     else:
         print("Warning: Database connection failed")
@@ -91,10 +50,9 @@ async def lifespan(app: FastAPI):
 
     print("Shutting down the API...")
     # Optionally close the database connection here
-    global db_instance
-    if db_instance:
-        # db_instance.close()
-        db_instance = None
+    global controller
+    if controller:
+        controller = None
 
 
 # Initialize the app
@@ -123,61 +81,55 @@ async def root():
         },
     }
 
-
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Server helper function that checks if everything is working"""
-    return {"status": "healthy", "message": "API is running"}
-
-
-@app.get("/rewards/{wallet_address}/{distributor_address}", response_model=RewardsResponse)
-async def get_wallet_rewards(wallet_address: str, distributor_address: str):
-    """Route for getting total rewards for a specific wallet from a specific distributor"""
+"""""
+Route for getting total rewards for a specific wallet from a specific distributor
+"""""
+@app.get("/rewards/{wallet_address}/{distributor}", response_model=RewardsResponse)
+async def get_wallet_rewards(wallet_address: str, distributor: str):
     try:
-        # Call the get_total_rewards function
-        result = get_total_rewards(wallet_address, distributor_address)
+        # Get all of the transfers for the wallet_address and distributor
+        transfers = controller.get_rewards_with_wallet_address_and_distributor_from_db(wallet_address, distributor)
+
+        # Aggregate the rewards
+        result = get_total_rewards(transfers)
 
         # Put the results into the rewards response
         return RewardsResponse(**result)
 
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
     except Exception as e:
         # Handle any unexpected exceptions
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-
-@app.get("/wallets", response_model=WalletsResponse)
-async def list_wallets():
-    """A route that lists available wallets / wallets that have received rewards"""
-    try:
-        db = get_db()
-        return db.get_all_wallets()
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error listing wallets: {str(e)}")
-
 
 @app.get("/wallets/{wallet_address}/distributors", response_model=DistributorsResponse)
 async def list_distributors_for_wallet(wallet_address: str):
     """This route gets a list of distributors for a given wallet"""
     try:
-        db = get_db()
-        return db.get_distributors_for_wallet(wallet_address)
+        return controller.get_wallets_distributors_from_db(wallet_address)
 
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error listing distributors: {str(e)}"
         )
 
+@app.get("/wallets", response_model=WalletsResponse)
+async def list_wallets():
+    """A route that lists available wallets / wallets that have received rewards"""
+    try:
+        return controller.get_all_wallets_from_db()
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing wallets: {str(e)}")
+
+@app.get("/health", response_model=HealthResponse)
+async def health_check():
+    """Server helper function that checks if everything is working"""
+    return {"status": "healthy", "message": "API is running"}
 
 @app.get("/supported_projects")
-async def list_supported_projects():
+async def get_supported_projects():
     """Gets the list of supported projects"""
     try:
-        db = get_db()
-        return db.get_supported_projects()
+        return controller.get_supported_projects_from_db()
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error listing supported projects: {str(e)}"
@@ -187,13 +139,11 @@ async def list_supported_projects():
 async def get_known_tokens():
     """Gets the list of supported projects"""
     try:
-        db = get_db()
-        return db.get_known_tokens()
+        return controller.get_known_tokens_from_db()
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error getting known tokens: {str(e)}"
         )
-
 
 # Starts the server
 if __name__ == "__main__":
