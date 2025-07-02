@@ -1,6 +1,6 @@
 from server.db.MongoDB import MongoDB
-from server.lib.fetch_data import get_and_add_token_metadata, organize_transfers_by_wallet
-from server.utils.update_db_from_file import add_project_transfers_from_file
+from server.lib.Controller import Controller
+from server.utils.update_db_from_file import add_distributor_transactions_from_file, add_projects_from_file
 import asyncio
 import requests
 import os
@@ -9,17 +9,10 @@ from pathlib import Path
 
 
 def main():
-
-   db = MongoDB()
-
+   # db = MongoDB()
    # db.create_indexes()
-
-   distributor = "D8gKfTxnwBG3XPTy4ZT6cGJbz1s13htKtv9j69qbhmv4"
-
-   transfers = db.get_project_transfers(distributor)
-
-   organize_transfers_by_wallet(transfers, distributor)
-
-
+   controller = Controller()
+   distributor = "CvgM6wSDXWCZeCmZnKRQdnh4CSga3UuTXwrCXy9Ju6PC"
+   controller.fetch_and_process_distributor_transactions(distributor)
 
 main()

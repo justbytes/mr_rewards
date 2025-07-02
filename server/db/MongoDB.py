@@ -2,27 +2,29 @@ import os
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from dotenv import load_dotenv
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, BulkWriteError
+from pymongo import UpdateOne
 
 load_dotenv()
 
-"""""
-This class connects to the MongoDB cluster url from the .env file. It can be used
-to query read and write projects and transactions to the database
-"""""
-class MongoDB:
 
-    """""
-    Create the connection to mongodb and get the target db
-    """""
+class MongoDB:
+    """
+    This class connects to the MongoDB cluster url from the .env file. It can be used
+    to query read and write projects and transactions to the database
+    """
+
     def __init__(self):
+        """
+        Create the connection to mongodb and get the target db
+        """
         self._client = MongoClient(os.getenv("MONGO_URL"), server_api=ServerApi("1"))
         self._db = self._client.rewards_db
 
-    """""
-    Send a ping to the client and return true if it was successful
-    """""
     def test_connection(self):
+        """
+        Send a ping to the client and return true if it was successful
+        """
         try:
             self._client.admin.command("ping")
             return True
@@ -30,10 +32,10 @@ class MongoDB:
             print(e)
             return False
 
-    """""
-    Inserts a project into the DB
-    """""
     def insert_supported_project(self, project):
+        """
+        Inserts a project into the DB
+        """
         try:
             # get the collection to write to
             collection = self._db.supported_projects
@@ -44,6 +46,7 @@ class MongoDB:
                 "distributor": project["distributor"],
                 "token_mint": project["token_mint"],
                 "dev_wallet": project["dev_wallet"],
+                "last_sig": project["last_sig"]
             }
 
             # Insert into database
@@ -57,26 +60,51 @@ class MongoDB:
             print(f"Error adding project to supported project: {e}")
             return False
 
-    """""
-    Return the supported projects
-    """""
     def get_supported_projects(self):
+        """
+        Return the supported projects
+        """
         try:
-
             collection = self._db.supported_projects
-
             projects = list(collection.find({}, {"_id": 0}))
-
-
             return projects
         except Exception as e:
             print(f"Error getting wallet transfers: {e}")
             return []
 
-    """""
-    Insert a known token to the database
-    """""
+    def get_last_tx_signature_for_distributor(self, distributor):
+        """
+        Get the most recent signature for a transaction of a given distributor
+        """
+        collection = self._db.supported_projects
+
+        # Find the project by the distributor then grab the last_sig value
+        project = collection.find_one({"distributor": distributor})
+
+        if project:
+            last_sig = project.get("last_sig")
+            return last_sig
+        else:
+            return None
+
+    def update_last_tx_signature_for_distributor(self, distributor, new_sig):
+        """
+        Update the most recent signature for a transaction of a given distributor
+        """
+        collection = self._db.supported_projects
+
+        # Update the last_sig value for the matching distributor
+        result = collection.update_one(
+            {"distributor": distributor},
+            {"$set": {"last_sig": new_sig}}
+        )
+        # Return True if a document was modified, False otherwise
+        return result.modified_count > 0
+
     def insert_known_token(self, token):
+        """
+        Insert a known token to the database
+        """
         try:
             # get the collection to write to
             collection = self._db.known_tokens
@@ -100,10 +128,10 @@ class MongoDB:
             print(f"Error adding project to supported project: {e}")
             return False
 
-    """""
-    Gets a list of known token data
-    """""
     def get_known_tokens(self):
+        """
+        Gets a list of known token data
+        """
         try:
             collection = self._db.known_tokens
             projects = list(collection.find({}, {"_id": 0}))
@@ -112,133 +140,174 @@ class MongoDB:
             print(f"Error getting wallet transfers: {e}")
             return
 
-    """""
-    Inserts a wallet transfer into the rewards_wallets collection
-    """""
-    # def insert_rewards_wallet_batch(
-    #     self, data, batch_size=500
+    # def insert_distributor_transactions_batch(
+    #     self, transactions, distributor, batch_size=1000
     # ):
-    #     # print(f"DATA FROM REWARDS WALLET {len(data)}")
+    #     """
+    #     Inserts a batch of distributors transactions containing all of the transfers to wallets into the database
+    #     """
+    #     # Make sure we have batches
+    #     if not transactions:
+    #         print("No transactions to insert")
+    #         return True
+
+    #     # Get the collection to insert transactions to
+    #     collection = self._get_distributor_collection(distributor)
+
+    #     # Process transactions in chunks
     #     total_inserted = 0
-    #     total_batches = (len(data) + batch_size - 1) // batch_size
+    #     error_count = 0
+    #     total_batches = (len(transactions) + batch_size - 1) // batch_size
+    #     print(f"Inserting {total_batches} batches")
 
-    #     # get the collection
-    #     collection = self._db.rewards_wallets
-
-    #     for i in range(0, len(data), batch_size):
-    #         batch = data[i:i + batch_size]
+    #     # Loop through and add the batches
+    #     for i in range(0, len(transactions), batch_size):
+    #         batch = transactions[i : i + batch_size]
     #         batch_num = (i // batch_size) + 1
 
-    #         # Insert into database
     #         try:
-    #             result = collection.insert_many(data)
+    #             # Insert the current batch
+    #             result = collection.insert_many(batch, ordered=False)
     #             total_inserted += len(result.inserted_ids)
 
-    #             print(f"Batch {batch_num}/{total_batches}: Inserted {len(result.inserted_ids)} documents")
-    #         except DuplicateKeyError:
-    #             print(f"Transfer already exists, skipping...")
-    #             return True
+    #         except BulkWriteError as e:
+    #             errors = e.details["writeErrors"]
+    #             for error in errors:
+    #                 if error["code"] != 11000:
+    #                     print(
+    #                         f"BulkWriteError when inserting into distributor transfers collection {e}"
+    #                     )
+
     #         except Exception as e:
-    #             print(f"Error inserting transfer: {e}")
-    #             return False
+    #             print(
+    #                 f"There an unkown error has occured when adding inserting into  distributor transfers  collection: {e}"
+    #             )
 
-    #     print(f"Total inserted: {total_inserted}/{len(data)} transactions")
-    #     return total_inserted == len(data)
+    #     return total_inserted
 
-    def insert_rewards_wallet_batch(self, transactions, batch_size=500):
+    # def get_all_distributor_transactions(self, distributor):
+    #     """
+    #     Get all of the transactions from a distributors collection
 
+    #     NOTE: This is resource intensive and some files have over 300 MB of data and
+    #         will continue to grow in size as time goes on. This will need to be
+    #         changed in the future to something more practical.
+    #     """
+    #     collection = self._get_distributor_collection(distributor)
+    #     transfers = list(collection.find({}, {"_id": 0}))
+    #     return transfers
+
+    def insert_transfers_batch(self, transactions, batch_size=1000):
+        """
+        Inserts a wallet transfer into the transfers collection
+        """
+        # Make sure we have transactions
         if not transactions:
             print("No transactions to insert")
             return True
 
-        collection = self._db.rewards_wallets
+        # Get the collection to insert into
+        collection = self._db.transfers
 
         # Process transactions in chunks
         total_inserted = 0
+        error_count = 0
         total_batches = (len(transactions) + batch_size - 1) // batch_size
 
         for i in range(0, len(transactions), batch_size):
-            batch = transactions[i:i + batch_size]
+            batch = transactions[i : i + batch_size]
             batch_num = (i // batch_size) + 1
 
             try:
                 # Insert the current batch
-                result = collection.insert_many(batch)
+                result = collection.insert_many(batch, ordered=False)
                 total_inserted += len(result.inserted_ids)
 
-                print(f"Batch {batch_num}/{total_batches}: Inserted {len(result.inserted_ids)} documents")
-
-            except DuplicateKeyError:
-                print(f"Transfer already exists, skipping...")
-                return True
+            except BulkWriteError as e:
+                errors = e.details["writeErrors"]
+                for error in errors:
+                    if error["code"] != 11000:
+                        print(
+                            f"BulkWriteError when inserting into rewards wallets collection {e}"
+                        )
 
             except Exception as e:
-                print(f"Batch {batch_num}: Unexpected error inserting batch: {e}")
-                return False
+                print(
+                    f"There an unkown error has occured when adding inserting into rewards wallets collection: {e}"
+                )
 
-        print(f"Total inserted: {total_inserted}/{len(transactions)} transactions")
-        return total_inserted == len(transactions)
+        # Return the total amount of tokens inserted
+        return total_inserted
 
+    def update_wallets(self, wallets, batch_size=1000):
+        """
+        Bulk update wallet balances with multiple distributors per wallet
+        """
+        collection = self._db.wallets
+        from pymongo import UpdateOne  # Add this import
 
-    """""
-    Inserts a batch of projects transfer data containing all of the transfers to wallets into the database
-    """""
-    def insert_batch_project_transfers(self, transactions, distributor, batch_size=500):
+        # Convert dict to list for slicing
+        wallet_items = list(wallets.items())
 
-        if not transactions:
-            print("No transactions to insert")
-            return True
+        total_updated = 0
+        total_batches = (len(wallet_items) + batch_size - 1) // batch_size
 
-        collection = self._get_distributor_collection(distributor)
-
-        # Process transactions in chunks
-        total_inserted = 0
-        total_batches = (len(transactions) + batch_size - 1) // batch_size
-
-        for i in range(0, len(transactions), batch_size):
-            batch = transactions[i:i + batch_size]
+        for i in range(0, len(wallet_items), batch_size):
+            # Get the current batch of wallets
+            batch = wallet_items[i:i + batch_size]
             batch_num = (i // batch_size) + 1
 
-            try:
-                # Insert the current batch
-                result = collection.insert_many(batch)
-                total_inserted += len(result.inserted_ids)
+            # Build bulk operations for this batch only
+            bulk_ops = []
 
-                print(f"Batch {batch_num}/{total_batches}: Inserted {len(result.inserted_ids)} documents")
+            for wallet_address, wallet_data in batch:
+                # Build the $inc operations for all distributor/token combinations
+                inc_ops = {}
 
-            except DuplicateKeyError:
-                print(f"Transfer already exists, skipping...")
-                return True
+                for distributor, distributor_data in wallet_data['distributors'].items():
+                    for token, token_data in distributor_data['tokens'].items():
+                        # Use dot notation for nested path
+                        path = f"distributors.{distributor}.tokens.{token}.total_amount"
+                        inc_ops[path] = token_data['total_amount']
 
-            except Exception as e:
-                print(f"Batch {batch_num}: Unexpected error inserting batch: {e}")
-                return False
+                # Create the update operation using UpdateOne class
+                bulk_ops.append(
+                    UpdateOne(
+                        {"wallet_address": wallet_address},
+                        {"$inc": inc_ops},
+                        upsert=True
+                    )
+                )
 
-        print(f"Total inserted: {total_inserted}/{len(transactions)} transactions")
-        return total_inserted == len(transactions)
+            # Execute this batch
+            if bulk_ops:
+                try:
+                    result = collection.bulk_write(bulk_ops, ordered=False)
+                    total_updated += result.modified_count + result.upserted_count
+                except Exception as e:
+                    print(f"Error in batch {batch_num}: {e}")
 
-    """""
-    Get the most recent signature for a transaction of a given distributor
-    """""
-    def get_last_signature_for_distributor(self, distributor):
-        return
+        return total_updated
 
-    """""
-    Get all of the transfers for a distributor
-    """""
-    def get_project_transfers(self, distributor):
-        collection = self._get_distributor_collection(distributor)
-        transfers = list(collection.find({}, {"_id": 0}))
-        return transfers
+    def get_wallet(self, wallet_address):
+        """
+        Get a specific wallet with all its distributors and tokens
+        """
+        collection = self._db.wallets
 
-    """""
-    Get all transfers for a wallet from a specific distributor
-    """""
-    def get_rewards_wallets_by_distributor(
+        # Find the wallet by its address
+        wallet = collection.find_one({"wallet_address": wallet_address})
+
+        return wallet
+
+    def get_transfers_with_wallet_address_and_distributor(
         self, wallet_address, distributor
     ):
+        """
+        Get all transfers for a wallet from a specific distributor
+        """
         try:
-            collection = self._db.rewards_wallets
+            collection = self._db.transfers
 
             # Query for transfers
             query = {"wallet_address": wallet_address, "distributor": distributor}
@@ -246,46 +315,18 @@ class MongoDB:
             # Get transfers and convert to list, excluding MongoDB's _id field
             transfers = list(collection.find(query, {"_id": 0}))
 
-            # Convert to the format expected by token_aggregator.py
-            formatted_transfers = []
-            for transfer in transfers:
-                formatted_transfers.append(
-                    {
-                        "signature": transfer["signature"],
-                        "slot": transfer["slot"],
-                        "timestamp": transfer["timestamp"],
-                        "amount": transfer["amount"],
-                        "token": transfer["token"],
-                    }
-                )
-
-            return formatted_transfers
+            return transfers
 
         except Exception as e:
             print(f"Error getting wallet transfers: {e}")
             return []
 
-    """""
-    Get list of all unique wallet addresses that have received transfers
-    """""
-    def get_all_wallets(self):
-        try:
-            collection = self._db.rewards_wallets
-
-            # Get distinct wallet addresses
-            wallets = collection.distinct("wallet_address")
-            return wallets
-
-        except Exception as e:
-            print(f"Error getting wallets: {e}")
-            return []
-
-    """""
-    Get list of all distributors that have sent transfers to a specific wallet
-    """""
     def get_distributors_for_wallet(self, wallet_address):
+        """
+        Get list of all distributors that have sent transfers to a specific wallet
+        """
         try:
-            collection = self._db.rewards_wallets
+            collection = self._db.transfers
 
             # Get distinct distributors for this wallet
             distributors = collection.distinct(
@@ -297,68 +338,63 @@ class MongoDB:
             print(f"Error getting distributors for wallet: {e}")
             return []
 
-    """""
-    Check if a wallet has any transfers from a specific distributor
-    """""
-    def wallet_has_transfers_from_distributor(
-        self, wallet_address, distributor
-    ):
+    def get_all_wallets(self):
+        """
+        Get list of all unique wallet addresses that have received transfers
+        """
         try:
+            collection = self._db.transfers
 
-            collection = self._db.rewards_wallets
-
-            # Check if any documents exist
-            count = collection.count_documents(
-                {"wallet_address": wallet_address, "distributor": distributor}
-            )
-
-            return count > 0
+            # Get distinct wallet addresses
+            wallets = collection.distinct("wallet_address")
+            return wallets
 
         except Exception as e:
-            print(f"Error checking wallet transfers: {e}")
-            return False
+            print(f"Error getting wallets: {e}")
+            return []
 
-
-    """""
-    Create database indexes for better performance
-    """""
     def create_indexes(self):
+        """
+        Create database indexes for better performance
+        """
         try:
-            # Create indexes for the project_transfers collections
-            projects = self.get_supported_projects()
-
-            # Create the indexes for each supported project
-            for p in projects:
-                collection = self._get_distributor_collection(p.get("distributor"))
-                collection.create_index("signature", unique=True)
-                collection.create_index("slot")
-                collection.create_index("timestamp")
-                collection.create_index("native_transfers.toUserAccount")
-                collection.create_index("native_transfers.amount")
-                collection.create_index("token_transfers.toUserAccount")
-                collection.create_index("token_transfers.tokenAmount")
-                collection.create_index("token_transfers.mint")
-
-
             # Get the collections from DB
-            rewards_wallets_collection = self._db.rewards_wallets
+            transfers_collection = self._db.transfers
+            wallets_collection = self._db.wallets
             supported_projects_collection = self._db.supported_projects
             known_tokens_collection = self._db.known_tokens
 
             # Supported projects collection indexes
             supported_projects_collection.create_index("token_mint", unique=True)
+            supported_projects_collection.create_index("last_sig")
+
+            # Wallets collection indexes
+            wallets_collection.create_index("wallet_address", unique=True)
 
             # Known tokens collection indexes
             known_tokens_collection.create_index("mint", unique=True)
 
             # Rewards wallets collencion indexes
-            rewards_wallets_collection.create_index([ ("wallet_address", 1), ("distributor", 1),("signature", 1),("slot", 1), ("timestamp", 1),("token", 1), ("amount",1)], unique=True)
-            rewards_wallets_collection.create_index([("wallet_address", 1), ("distributor", 1)])
-            rewards_wallets_collection.create_index("signature")
-            rewards_wallets_collection.create_index("wallet_address")
-            rewards_wallets_collection.create_index("distributor")
-            rewards_wallets_collection.create_index("timestamp")
-            rewards_wallets_collection.create_index("slot")
+            transfers_collection.create_index(
+                [
+                    ("wallet_address", 1),
+                    ("distributor", 1),
+                    ("signature", 1),
+                    ("slot", 1),
+                    ("timestamp", 1),
+                    ("token", 1),
+                    ("amount", 1),
+                ],
+                unique=True,
+            )
+            transfers_collection.create_index(
+                [("wallet_address", 1), ("distributor", 1)]
+            )
+            transfers_collection.create_index("signature")
+            transfers_collection.create_index("wallet_address")
+            transfers_collection.create_index("distributor")
+            transfers_collection.create_index("timestamp")
+            transfers_collection.create_index("slot")
 
             print("Database indexes created successfully")
             return True
@@ -366,24 +402,3 @@ class MongoDB:
         except Exception as e:
             print(f"Error creating indexes: {e}")
             return False
-
-
-    """""
-    Gets the collection for a given distributor
-    """""
-    def _get_distributor_collection(self, distributor):
-        print(distributor)
-        match distributor:
-            case "CvgM6wSDXWCZeCmZnKRQdnh4CSga3UuTXwrCXy9Ju6PC":
-                return self._db.distribute_transfers
-            case "GVLwP2iR4sqEX9Tos3cmQQRqAumzRumxKD42qyCbCyCC":
-                return self._db.tnt_transfers
-            case "D8gKfTxnwBG3XPTy4ZT6cGJbz1s13htKtv9j69qbhmv4":
-                return self._db.iplr_transfers
-            case "BoonAKjwqfxj3Z1GtZHWeEMnoZLqgkSFEqRwhRsz4oQ":
-                return self._db.boon_transfers
-            case "9uJbttvvowG1rVpPt6GMB3mL7BuktaHaNzFQbkACfiNN":
-                return self._db.click_transfers
-            case _:
-                print("Unknown distributor address")
-                return
