@@ -142,44 +142,50 @@ class MongoDB:
     def insert_transfers_batch(self, transactions, batch_size=1000):
         """
         Inserts a wallet transfer into the transfers collection
+        Returns the actual inserted documents and their count
         """
-        # Make sure we have transactions
         if not transactions:
             print("No transactions to insert")
-            return True
+            return [], 0
 
-        # Get the collection to insert into
         collection = self._db.transfers
-
-        # Process transactions in chunks
         total_inserted = 0
-        error_count = 0
-        total_batches = (len(transactions) + batch_size - 1) // batch_size
+        actually_inserted_docs = []
 
         for i in range(0, len(transactions), batch_size):
             batch = transactions[i : i + batch_size]
             batch_num = (i // batch_size) + 1
 
             try:
-                # Insert the current batch
                 result = collection.insert_many(batch, ordered=False)
-                total_inserted += len(result.inserted_ids)
+                # These were successfully inserted
+                inserted_count = len(result.inserted_ids)
+                total_inserted += inserted_count
+
+                # Track which documents were actually inserted
+                actually_inserted_docs.extend(batch)
 
             except BulkWriteError as e:
+                # Some succeeded, some failed (likely duplicates)
                 errors = e.details["writeErrors"]
+                successful_inserts = len(batch) - len(errors)
+                total_inserted += successful_inserts
+
+                # Figure out which ones were actually inserted
+                error_indices = {error["index"] for error in errors if error["code"] == 11000}
+                for idx, doc in enumerate(batch):
+                    if idx not in error_indices:
+                        actually_inserted_docs.append(doc)
+
+                # Log non-duplicate errors
                 for error in errors:
                     if error["code"] != 11000:
-                        print(
-                            f"BulkWriteError when inserting into rewards wallets collection {e}"
-                        )
+                        print(f"BulkWriteError: {error}")
 
             except Exception as e:
-                print(
-                    f"There an unkown error has occured when adding inserting into rewards wallets collection: {e}"
-                )
+                print(f"Unknown error inserting transfers: {e}")
 
-        # Return the total amount of tokens inserted
-        return total_inserted
+        return actually_inserted_docs, total_inserted
 
     def update_wallets(self, wallets, batch_size=1000):
         """
