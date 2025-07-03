@@ -13,7 +13,6 @@ class MongoDB:
     This class connects to the MongoDB cluster url from the .env file. It can be used
     to query read and write projects and transactions to the database
     """
-
     def __init__(self):
         """
         Create the connection to mongodb and get the target db
@@ -139,63 +138,6 @@ class MongoDB:
         except Exception as e:
             print(f"Error getting wallet transfers: {e}")
             return
-
-    # def insert_distributor_transactions_batch(
-    #     self, transactions, distributor, batch_size=1000
-    # ):
-    #     """
-    #     Inserts a batch of distributors transactions containing all of the transfers to wallets into the database
-    #     """
-    #     # Make sure we have batches
-    #     if not transactions:
-    #         print("No transactions to insert")
-    #         return True
-
-    #     # Get the collection to insert transactions to
-    #     collection = self._get_distributor_collection(distributor)
-
-    #     # Process transactions in chunks
-    #     total_inserted = 0
-    #     error_count = 0
-    #     total_batches = (len(transactions) + batch_size - 1) // batch_size
-    #     print(f"Inserting {total_batches} batches")
-
-    #     # Loop through and add the batches
-    #     for i in range(0, len(transactions), batch_size):
-    #         batch = transactions[i : i + batch_size]
-    #         batch_num = (i // batch_size) + 1
-
-    #         try:
-    #             # Insert the current batch
-    #             result = collection.insert_many(batch, ordered=False)
-    #             total_inserted += len(result.inserted_ids)
-
-    #         except BulkWriteError as e:
-    #             errors = e.details["writeErrors"]
-    #             for error in errors:
-    #                 if error["code"] != 11000:
-    #                     print(
-    #                         f"BulkWriteError when inserting into distributor transfers collection {e}"
-    #                     )
-
-    #         except Exception as e:
-    #             print(
-    #                 f"There an unkown error has occured when adding inserting into  distributor transfers  collection: {e}"
-    #             )
-
-    #     return total_inserted
-
-    # def get_all_distributor_transactions(self, distributor):
-    #     """
-    #     Get all of the transactions from a distributors collection
-
-    #     NOTE: This is resource intensive and some files have over 300 MB of data and
-    #         will continue to grow in size as time goes on. This will need to be
-    #         changed in the future to something more practical.
-    #     """
-    #     collection = self._get_distributor_collection(distributor)
-    #     transfers = list(collection.find({}, {"_id": 0}))
-    #     return transfers
 
     def insert_transfers_batch(self, transactions, batch_size=1000):
         """
@@ -365,7 +307,8 @@ class MongoDB:
             known_tokens_collection = self._db.known_tokens
 
             # Supported projects collection indexes
-            supported_projects_collection.create_index("token_mint", unique=True)
+            supported_projects_collection.create_index("token_mint", unique=False)
+            supported_projects_collection.create_index("distributor", unique=True)
             supported_projects_collection.create_index("last_sig")
 
             # Wallets collection indexes
