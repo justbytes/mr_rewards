@@ -4,9 +4,9 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
-from ..db.MongoDB import MongoDB
-from ..utils.utils import process_distributor_transfers, aggregate_transfers
-from ..utils.helius import get_token_metadata, get_distributor_transactions
+from db.MongoDB import MongoDB
+from utils.utils import process_distributor_transfers, aggregate_transfers
+from utils.helius import get_token_metadata, get_distributor_transactions
 
 load_dotenv()
 
@@ -153,17 +153,18 @@ class Controller:
     ##################################
     #        GETTERS FOR DB          #
     ##################################
-    def get_all_wallets_from_db(self):
-        return self.db.get_all_wallets()
-
+    # Maybe these should be private
     def get_supported_projects_from_db(self):
         return self.db.get_supported_projects()
 
     def get_known_tokens_from_db(self):
         return self.db.get_known_tokens()
 
-    def get_rewards_with_wallet_address_and_distributor_from_db(self, wallet_address, distributor):
-        return self.db.get_rewards_with_wallet_address_and_distributor(wallet_address, distributor)
+    def get_transfers_with_wallet_address_and_distributor_from_db(self, wallet_address, distributor):
+        return self.db.get_transfers_with_wallet_address_and_distributor(wallet_address, distributor)
+
+    def get_rewards_with_wallet_address_from_db(self, wallet_address):
+        return self.db.get_wallet(wallet_address)
 
     def get_wallets_distributors_from_db(self, wallet_address):
         return self.db.get_wallets_distributors(wallet_address)
