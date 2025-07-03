@@ -38,6 +38,7 @@ def get_distributor_transactions(
 
             # If no transactions returned, we've reached the end
             if not txs:
+                print("No more transactions!")
                 break
 
             # Add transactions to current batch
@@ -48,7 +49,7 @@ def get_distributor_transactions(
 
         except Exception as e:
             print(f"Error when fetching distributor transactions from helius: {e}")
-            break
+            return None
 
         # Check if batch is full
         if len(batch) >= batch_size:

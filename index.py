@@ -11,9 +11,9 @@ from pathlib import Path
 def main():
    # db = MongoDB()
    # db.create_indexes()
-   # controller = Controller()
-   # distributor = "CvgM6wSDXWCZeCmZnKRQdnh4CSga3UuTXwrCXy9Ju6PC"
-   # controller.fetch_and_process_distributor_transactions(distributor)
+   controller = Controller()
+   distributor = "ChGA1Wbh9WN8MDiQ4ggA5PzBspS2Z6QheyaxdVo3XdW6"
+   controller.fetch_and_process_distributor_transactions(distributor)
    pass
 
 main()

@@ -4,9 +4,9 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
-from db.MongoDB import MongoDB
-from utils.utils import process_distributor_transfers, aggregate_transfers
-from utils.helius import get_token_metadata, get_distributor_transactions
+from ..db.MongoDB import MongoDB
+from ..utils.utils import process_distributor_transfers, aggregate_transfers
+from ..utils.helius import get_token_metadata, get_distributor_transactions
 
 load_dotenv()
 
@@ -57,21 +57,18 @@ class Controller:
 
             # Extract the transfers from the transactions and insert them into the db
             for transfer_batch in self.extract_transfers_from_distributor_transactions(transaction_batch.get("txs"), distributor):
+
                 # Update wallets with new rewards amounts
                 self.aggregate_rewards(transfer_batch, distributor)
 
-    def extract_transfers_from_distributor_transactions(
-        self, transactions, distributor, batch_size=1000
-    ):
+    def extract_transfers_from_distributor_transactions(self, transactions, distributor, batch_size=1000):
         """
-        Given a list of project transfer transactions extract each transfer from native and token transfer lists and insert it into the DB
+        Extract transfers and insert into DB, yielding only successfully inserted transfers
         """
         total_inserted = 0
-        error_count = 0
+        total_docs = 0
         total_batches = (len(transactions) + batch_size - 1) // batch_size
 
-        # Loop through each transaction and get the transfers from the native and token transfer lists
-        # then insert them into the DB
         for i in range(0, len(transactions), batch_size):
             batch = transactions[i : i + batch_size]
             batch_num = (i // batch_size) + 1
@@ -79,13 +76,15 @@ class Controller:
             # Get the transfers
             processed_batch = process_distributor_transfers(self, batch, distributor)
 
-            # Insert into the database
-            inserted = self.db.insert_transfers_batch(processed_batch)
-            total_inserted += inserted
-            print(
-                f"Extracted Transfer Batch: {batch_num}/{total_batches} Total inserted: {total_inserted} "
-            )
-            yield processed_batch
+            # Insert into database and get what was actually inserted
+            inserted_docs, inserted_count = self.db.insert_transfers_batch(processed_batch)
+            total_inserted += inserted_count
+            total_docs += len(processed_batch)
+
+            print(f"Transfer Batch {batch_num}/{total_batches}: {inserted_count} inserted, {len(processed_batch) - inserted_count} duplicates skipped. Total: {total_inserted}/{total_docs}")
+
+            # Only yield the transfers that were actually inserted
+            yield inserted_docs
 
     def aggregate_rewards(self, transfers, distributor, batch_size=1000):
         """
