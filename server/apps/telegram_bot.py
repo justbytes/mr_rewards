@@ -37,8 +37,8 @@ def mr_rewards_bot():
         """Displays the main menu for the home callback"""
 
         bot.answer_callback_query(call.id)
-        markup = create_main_menu_markup()
-        response_text = get_main_menu_text()
+        markup, response_text = create_main_menu_display()
+
 
         bot.edit_message_text(
             response_text,
@@ -53,7 +53,7 @@ def mr_rewards_bot():
         bot.answer_callback_query(call.id)  # This acknowledges the button press
 
         # Holds the buttons
-        markup = create_supported_projects_markup()
+        markup = create_supported_projects_display()
 
         # Edit the original message or send a new one
         bot.edit_message_text(
@@ -67,7 +67,7 @@ def mr_rewards_bot():
     def handle_supported_projects_command(message):
         """Gets a list of supported projects and displays them in columns """
         # Holds the buttons
-        markup = create_supported_projects_markup()
+        markup = create_supported_projects_display()
 
         # Sends the message to the user with the options
         bot.send_message(
@@ -85,7 +85,7 @@ def mr_rewards_bot():
         # Prompt user to enter the address
         bot.send_message(
             call.message.chat.id, # Chat id for our user
-            f"You selected {project_name}. Please enter your wallet address:",
+            f"You selected {project_name}. Please enter your wallet address\n (Type 'cancel' to stop)"
         )
 
         # Set the next step handler to wait for wallet address
@@ -155,41 +155,97 @@ def mr_rewards_bot():
         return markup
 
     def create_rewards_display(message, data, project_name, wallet_address):
-
-        # Return if nothing was found
-        if not data.get("found", False):
-            bot.reply_to(message, "No rewards found for this wallet")
-            return
-
         # Format the rewards information
         response_text = f"🤑 *Rewards from {project_name}*\n"
         response_text += f"📬 Wallet: `{wallet_address[:6]}...{wallet_address[-4:]}`\n"
-        response_text += f"📊 Total Transfers: {data.get('transfer_count', 0)}\n"
 
-        # Get the reward amounts
-        total_amounts = data.get("total_amounts", [])
+        # Get the tokens data
+        tokens = data.get("tokens", {})
 
         # Create the applicable message response
-        if not total_amounts:
+        if not tokens:
             response_text += "No reward amounts available."
         else:
-            response_text += "*🧐 Rewards Recieved:*\n"
+            response_text += "*🧐 Rewards Received:*\n\n"
 
-            # Loop through the rewards amounts and add each one to the message
-            for i, reward in enumerate(total_amounts, 1):
-                token = reward.get("token", "Unknown")
-                total_amount = reward.get("total_amount", 0)
-                decimals = reward.get("decimals", 0)
-
-                response_text += f"**{token}**\n"
-                response_text += f"   Amount: `{total_amount}`\n"
+            # Loop through the tokens and add each one to the message
+            for token_name, token_data in tokens.items():
+                total_amount = token_data.get("total_amount", 0)
+                response_text += f"*{token_name}*: {total_amount:,.6f}\n"
 
         # Check for errors
         if data.get("error"):
             response_text += f"\n⚠️ *Note:* {data['error']}"
 
-        # send the user the data
-        bot.send_message(message.chat.id, response_text, parse_mode="Markdown")
+        markup = types.InlineKeyboardMarkup()
+
+        # Back button to go to main menu
+        back_button = types.InlineKeyboardButton(
+            text="Go Back",
+            callback_data="supported_projects"
+        )
+
+        markup.add(back_button)
+        # Send the user the data
+        bot.send_message(message.chat.id, response_text, reply_markup=markup, parse_mode="Markdown")
+
+    def get_wallet_rewards_with_distributor(message, project_name):
+        wallet_address = message.text.strip()
+
+        # Users can cancel the operation by typing cancel and will be redirected to
+        # supported projects display
+        if wallet_address.lower() == "cancel":
+            bot.send_message(
+                message.chat.id,
+                "❌ Operation cancelled."
+            )
+            handle_supported_projects_command(message)
+            return
+
+        # Validate the wallet address and prompt a retry if its not a valid address
+        if len(wallet_address) < 32 or len(wallet_address) > 44:
+            bot.send_message(
+                message.chat.id,
+                f"❌ Invalid wallet address (length: {len(wallet_address)}). \n\n"
+                f"Please enter a valid wallet address (32-44 characters) or type 'cancel' to stop:"
+            )
+            bot.register_next_step_handler(message, get_wallet_rewards_with_distributor, project_name)
+            return
+
+        # Fetch the rewards data
+        rewards_data = get_rewards_data(wallet_address)
+
+        # If theres none notify the user and redirect back to supported projects
+        if rewards_data is None:
+            bot.send_message(
+                message.chat.id,
+                f"❌ No rewards data found for {wallet_address}."
+            )
+            handle_supported_projects_command(message)
+            return
+        # If the data is of type string then there was an error and we will print the
+        # exception to the user and redirect back to supported projects
+        elif isinstance(rewards_data, str):
+            bot.send_message(
+                message.chat.id,
+                f"❌ {rewards_data}"
+            )
+            handle_supported_projects_command(message)
+            return
+
+        # Get the distributor address using the name of the project
+        distributor = get_distributor_address_by_name(project_name)
+        rewards_from_project = rewards_data['distributors'].get(distributor)
+        if rewards_from_project:
+            create_rewards_display(message, rewards_from_project, project_name, wallet_address)
+        else:
+            bot.send_message(
+                message.chat.id,
+                f"❌ No rewards recieved from {project_name}"
+            )
+            handle_supported_projects_command(message)
+            return
+
 
     # Activates the bot
     bot.infinity_polling()
@@ -202,8 +258,7 @@ def get_supported_projects():
     )
     try:
         response = requests.get(url, timeout=30)
-        data = response.json()
-        return data
+        return response.json()
     except Exception as e:
         print(f"Could not get supported projects from server. Please try again later.")
         raise
@@ -213,11 +268,10 @@ def get_rewards_data(wallet_address):
     url = f"{os.getenv("API_URL")}/rewards/{wallet_address}"
     try:
         response = requests.get(url, timeout=30)
-        data = response.json()
-        print(data)
+        return response.json()
     except Exception as e:
         print(f"Could not get rewards data for wallet address from server. Please try again later.")
-        raise
+        return "Could not get rewards data for wallet address from server. Please try again later."
 
 def get_distributor_address_by_name(distributor_name):
     """Gets the distributor address for a projects name"""
