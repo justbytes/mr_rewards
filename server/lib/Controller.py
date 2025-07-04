@@ -4,9 +4,9 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
-from ..db.MongoDB import MongoDB
-from ..utils.utils import process_distributor_transfers, aggregate_transfers
-from ..utils.helius import get_token_metadata, get_distributor_transactions
+from db.MongoDB import MongoDB
+from utils.utils import process_distributor_transfers, aggregate_transfers
+from utils.helius import get_token_metadata, get_distributor_transactions
 
 load_dotenv()
 
