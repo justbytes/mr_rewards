@@ -7,7 +7,7 @@ from .models import  WalletsRewardsResponse
 # Initialize the router
 router = APIRouter()
 
-@router.get("/{wallet_address}", response_model=WalletsRewardsResponse)
+@router.get("/{wallet_address}", response_model=WalletsRewardsResponse | None)
 async def get_wallets_rewards(wallet_address: str, controller: Controller = Depends(get_controller)):
     """Gets the total rewards amounts for a given wallet address"""
     # Validate address
