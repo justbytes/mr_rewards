@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_distributor_transactions(
-    distributor, before, batch_size=1000
+    distributor, before, batch_size=500
 ):
     batch = []
     batch_count = 0

@@ -5,6 +5,7 @@ from lib.Controller import Controller
 from .dependency import get_controller
 from .models import HealthResponse, SupportedProject
 
+# Initialize the router
 router = APIRouter()
 
 @router.get("/supported_projects", response_model=List[SupportedProject])

@@ -57,7 +57,7 @@ class MongoDB:
             return True
         except Exception as e:
             print(f"Error adding project to supported project: {e}")
-            return False
+            return None
 
     def get_supported_projects(self):
         """
@@ -68,37 +68,45 @@ class MongoDB:
             projects = list(collection.find({}, {"_id": 0}))
             return projects
         except Exception as e:
-            print(f"Error getting wallet transfers: {e}")
-            return []
+            print(f"Error getting wallet transfers")
+            return None
 
     def get_last_tx_signature_for_distributor(self, distributor):
         """
         Get the most recent signature for a transaction of a given distributor
         """
-        collection = self._db.supported_projects
+        try:
+            collection = self._db.supported_projects
 
-        # Find the project by the distributor then grab the last_sig value
-        project = collection.find_one({"distributor": distributor})
+            # Find the project by the distributor then grab the last_sig value
+            project = collection.find_one({"distributor": distributor})
 
-        if project:
-            last_sig = project.get("last_sig")
-            return last_sig
-        else:
+            if project:
+                last_sig = project.get("last_sig")
+                return last_sig
+            else:
+                return None
+        except Exception as e:
+            print(f"Error getting the last tx signature")
             return None
 
     def update_last_tx_signature_for_distributor(self, distributor, new_sig):
         """
         Update the most recent signature for a transaction of a given distributor
         """
-        collection = self._db.supported_projects
+        try:
+            collection = self._db.supported_projects
 
-        # Update the last_sig value for the matching distributor
-        result = collection.update_one(
-            {"distributor": distributor},
-            {"$set": {"last_sig": new_sig}}
-        )
-        # Return True if a document was modified, False otherwise
-        return result.modified_count > 0
+            # Update the last_sig value for the matching distributor
+            result = collection.update_one(
+                {"distributor": distributor},
+                {"$set": {"last_sig": new_sig}}
+            )
+            # Return True if a document was modified, False otherwise
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"Error when updating tx signature in db")
+            return None
 
     def insert_known_token(self, token):
         """
@@ -124,8 +132,8 @@ class MongoDB:
             print(f"Token '{token['symbol']}' already exists, skipping...")
             return True
         except Exception as e:
-            print(f"Error adding project to supported project: {e}")
-            return False
+            print(f"Error adding project to supported project")
+            return None
 
     def get_known_tokens(self):
         """
@@ -136,8 +144,8 @@ class MongoDB:
             projects = list(collection.find({}, {"_id": 0}))
             return projects
         except Exception as e:
-            print(f"Error getting wallet transfers: {e}")
-            return
+            print(f"Error getting wallet transfers")
+            return None
 
     def insert_transfers_batch(self, transactions, batch_size=1000):
         """
@@ -180,10 +188,10 @@ class MongoDB:
                 # Log non-duplicate errors
                 for error in errors:
                     if error["code"] != 11000:
-                        print(f"BulkWriteError: {error}")
+                        print(f"BulkWriteError other then duplicate error occured")
 
             except Exception as e:
-                print(f"Unknown error inserting transfers: {e}")
+                print(f"Unknown error inserting transfers")
 
         return actually_inserted_docs, total_inserted
 
@@ -192,7 +200,6 @@ class MongoDB:
         Bulk update wallet balances with multiple distributors per wallet
         """
         collection = self._db.wallets
-        from pymongo import UpdateOne  # Add this import
 
         # Convert dict to list for slicing
         wallet_items = list(wallets.items())
@@ -205,7 +212,7 @@ class MongoDB:
             batch = wallet_items[i:i + batch_size]
             batch_num = (i // batch_size) + 1
 
-            # Build bulk operations for this batch only
+            # Build bulk operations for batch
             bulk_ops = []
 
             for wallet_address, wallet_data in batch:
@@ -233,20 +240,24 @@ class MongoDB:
                     result = collection.bulk_write(bulk_ops, ordered=False)
                     total_updated += result.modified_count + result.upserted_count
                 except Exception as e:
-                    print(f"Error in batch {batch_num}: {e}")
+                    print(f"Error in batch {batch_num}")
 
         return total_updated
 
-    def get_wallet(self, wallet_address):
+    def get_wallet_rewards(self, wallet_address):
         """
         Get a specific wallet with all its distributors and tokens
         """
-        collection = self._db.wallets
+        try:
+            collection = self._db.wallets
 
-        # Find the wallet by its address
-        wallet = collection.find_one({"wallet_address": wallet_address})
+            # Find the wallet by its address
+            wallet = collection.find_one({"wallet_address": wallet_address})
 
-        return wallet
+            return wallet
+        except Exception as e:
+            print(f"Error getting wallet rewards")
+            return None
 
     def get_transfers_with_wallet_address_and_distributor(
         self, wallet_address, distributor
@@ -266,8 +277,8 @@ class MongoDB:
             return transfers
 
         except Exception as e:
-            print(f"Error getting wallet transfers: {e}")
-            return []
+            print(f"Error getting wallet transfers with wallet address and distributor")
+            return None
 
     def get_distributors_for_wallet(self, wallet_address):
         """
@@ -283,8 +294,8 @@ class MongoDB:
             return distributors
 
         except Exception as e:
-            print(f"Error getting distributors for wallet: {e}")
-            return []
+            print(f"Error getting distributors for wallet")
+            return None
 
     def get_all_wallets(self):
         """
@@ -298,8 +309,8 @@ class MongoDB:
             return wallets
 
         except Exception as e:
-            print(f"Error getting wallets: {e}")
-            return []
+            print(f"Error getting all wallets")
+            return None
 
     def create_indexes(self):
         """
@@ -349,5 +360,5 @@ class MongoDB:
             return True
 
         except Exception as e:
-            print(f"Error creating indexes: {e}")
+            print(f"Error creating indexes")
             return False

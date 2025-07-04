@@ -14,6 +14,6 @@ def main():
    controller = Controller()
    distributor = "ChGA1Wbh9WN8MDiQ4ggA5PzBspS2Z6QheyaxdVo3XdW6"
    controller.fetch_and_process_distributor_transactions(distributor)
-   pass
+
 
 main()

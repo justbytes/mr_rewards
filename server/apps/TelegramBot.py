@@ -5,7 +5,6 @@ import requests
 from telebot import types
 from pathlib import Path
 from dotenv import load_dotenv
-from ..db.MongoDB import MongoDB
 
 load_dotenv()
 
@@ -14,9 +13,8 @@ load_dotenv()
 class TelegramBot:
 
     def __init__(self):
-        self.db = MongoDB()
         self.bot = telebot.TeleBot(os.getenv("TELE_BOT_TOKEN"))
-        self.projects = self.refresh_supported_projects()
+        self.projects = self.get_supported_projects()
 
         # Register handlers
         self.bot.message_handler(commands=["start", "help"])(self.start)
@@ -33,7 +31,7 @@ class TelegramBot:
         self.bot.infinity_polling()
 
     # Display the main menu
-    def start(message):
+    def start(self, message):
         markup = types.InlineKeyboardMarkup()
 
         response_text = "Mr. Rewards\n\n"
@@ -54,7 +52,7 @@ class TelegramBot:
 
     # This is for the "See Rewards" button in the /start screen
     # Had the same functionality as calling /rewards command
-    def handle_rewards_callback(call):
+    def handle_rewards_callback(self, call):
         self.bot.answer_callback_query(call.id)  # This acknowledges the button press
 
         # Holds the buttons
@@ -76,7 +74,7 @@ class TelegramBot:
         )
 
     # Displays a list of projects to choose from
-    def show_projects(message):
+    def show_projects(self, message):
 
         # Holds the buttons
         markup = types.InlineKeyboardMarkup()
@@ -96,7 +94,7 @@ class TelegramBot:
         )
 
     # Runs when a rewards button is pressed which then gets the rewards data for that project
-    def handle_project_selection(call):
+    def handle_project_selection(self, call):
         # Cut off the calldata identifier
         project_name = call.data.replace("project_", "")
 
@@ -108,26 +106,19 @@ class TelegramBot:
 
         # Set the next step handler to wait for wallet address
         self.bot.register_next_step_handler(
-            call.message, process_wallet_address, project_name
+            call.message, self.process_wallet_address, project_name
         )
 
     # Fallback for unknown commands
-    def handle_unknown_command(message):
+    def handle_unknown_command(self, message):
         self.bot.reply_to(
             message, "Unknown command. Use /help to go back to the main menu!"
         )
 
     # Makes the api call to get the rewards for a wallet
-    def process_wallet_address(message, project_name):
+    def process_wallet_address(self, message, project_name):
         wallet_address = message.text.strip()
         distributor_address = self.projects[project_name]
-
-        # Validate wallet address format (basic check)
-        if not wallet_address or len(wallet_address) not in [43, 44]:
-            self.bot.reply_to(
-                message, "Invalid wallet address. Please try again with /rewards"
-            )
-            return
 
         # Send a loading message to user
         self.bot.send_message(
@@ -137,34 +128,29 @@ class TelegramBot:
         try:
             # Make request to the API
             url = (
-                f"{os.getenv('API_URL')}/rewards/{wallet_address}/{distributor_address}"
+                f"{os.getenv('API_URL')}/rewards/{wallet_address}"
             )
             response = requests.get(url, timeout=30)
-
+            print(response)
             # Parse the response
             if response.status_code == 200:
                 data = response.json()
 
                 # Format the result
-                format_and_send_rewards(message, data, project_name, wallet_address)
+                print(data)
             else:
                 self.bot.reply_to(
                     message,
                     f"Server error: {response.status_code}. Please try again later.",
                 )
-        # Throw an error if server has lost connection
-        except requests.exceptions.ConnectionError:
-            self.bot.reply_to(
-                message, "Could not connect to rewards server. Please try again later."
-            )
         # Timeout
         except requests.exceptions.Timeout:
             self.bot.reply_to(message, "Request timed out. Please try again later.")
         except Exception as e:
-            self.bot.reply_to(message, f"An error occurred: {str(e)}")
+            self.bot.reply_to(message, f"An error occurred: {e}")
 
     # Creates the message to send back the user containing the rewards data
-    def format_and_send_rewards(message, data, project_name, wallet_address):
+    def format_and_send_rewards(self, message, data, project_name, wallet_address):
 
         # Return if nothing was found
         if not data.get("found", False):
@@ -202,5 +188,14 @@ class TelegramBot:
         self.bot.send_message(message.chat.id, response_text, parse_mode="Markdown")
 
     # Get a fresh list of projects in the case we update the supported projects
-    def refresh_supported_projects():
-        self.projects = self.db.get_supported_projects()
+    def get_supported_projects(self):
+
+        # Make request to the API
+        url = (
+            f"{os.getenv('API_URL')}/supported_projects"
+        )
+        response = requests.get(url, timeout=30)
+        print(response)
+        data = response.json()
+        print(data)
+        return data
