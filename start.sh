@@ -5,9 +5,9 @@
 python3 server/index.py &
 
 # Give the server a moment to start up
-sleep 2
+sleep 1
 
-# Start the Telegram bot (this will run in foreground)
+# Start the Telegram bot
 python3 server/src/telegram_bot.py &
 
 # Wait for all background processes

@@ -104,9 +104,9 @@ class Controller:
             aggregated_batch = aggregate_transfers(batch)
             updated = self.db.update_wallets(aggregated_batch)
             total_inserted += updated
-            print(
-                f"Aggregated Rewards Batch: {batch_num}/{total_batches} Total updated: {total_inserted} "
-            )
+            # print(
+            #     f"Aggregated Rewards Batch: {batch_num}/{total_batches} Total updated: {total_inserted} "
+            # )
 
     def get_and_add_token_metadata(self, mint_address):
         """
@@ -148,11 +148,6 @@ class Controller:
 
         return symbol
 
-
-    ##################################
-    #        GETTERS FOR DB          #
-    ##################################
-    # Maybe these should be private
     def get_supported_projects_from_db(self):
         return self.db.get_supported_projects()
 
@@ -163,7 +158,7 @@ class Controller:
         return self.db.get_transfers_with_wallet_address_and_distributor(wallet_address, distributor)
 
     def get_rewards_with_wallet_address_from_db(self, wallet_address):
-        return self.db.get_wallet(wallet_address)
+        return self.db.get_wallet_rewards(wallet_address)
 
     def get_wallets_distributors_from_db(self, wallet_address):
         return self.db.get_wallets_distributors(wallet_address)
