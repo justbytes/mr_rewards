@@ -190,7 +190,7 @@ def mr_rewards_bot():
             reply_markup=markup,
         )
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("project_"))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("proj_"))
     def handle_supported_project_selection(call):
         """
         This is called when a user clicks a project button. First it slices the "project_" from the call data
@@ -199,18 +199,26 @@ def mr_rewards_bot():
         """
 
         # Cut off the calldata identifier
-        callback_data = call.data.replace("project_", "")
-
+        callback_data = call.data.replace("proj_", "")
         # Seperate the name from the distributor
-        parts = callback_data.rsplit("_", 1)
+        parts = callback_data.rsplit("_", 2)
         name = parts[0]
         distributor = parts[1]
+        back_to = parts[2] # This is the callback for the back button on the create_rewards_display
 
         # Check if we have a wallet in the cache for the chat id
         if call.message.chat.id in user_cache:
             rewards_data = user_cache[call.message.chat.id]
         else:
-            # TODO Get the users wallet address and add it to the cache
+            # send user the prompt to enter wallet address
+            bot.send_message(
+                call.message.chat.id,
+                f"⚠️ You need to configure your wallet first.\n\n Please enter your wallet address\n (Type 'cancel' to stop)"
+            )
+
+            # Once they response with the wallet address we call the set_user_wallet
+            # to get the wallet data and add it to the cache
+            bot.register_next_step_handler(call.message, set_user_wallet)
             return
 
         # Get the users wallet address and rewards amounts for the selected distributor
@@ -220,7 +228,7 @@ def mr_rewards_bot():
         # If we have rewards build the rewards display otherwise notify the user that
         # they didn't recieve rewards from that distributor
         if rewards_from_project:
-            create_rewards_display(call.message, rewards_from_project, name, wallet_address)
+            create_rewards_display(call.message, rewards_from_project, name, wallet_address, back_to)
         else:
             bot.send_message(
                 call.message.chat.id,
@@ -238,7 +246,16 @@ def mr_rewards_bot():
         if call.message.chat.id in user_cache:
             rewards_data = user_cache[call.message.chat.id]
         else:
-            # TODO Get the users wallet address and add it to the cache
+            # send user the prompt to enter wallet address
+            bot.send_message(
+                call.message.chat.id,
+                f"⚠️ You need to configure your wallet first.\n\n Please enter your wallet address\n (Type 'cancel' to stop)"
+
+            )
+
+            # Once they response with the wallet address we call the set_user_wallet
+            # to get the wallet data and add it to the cache
+            bot.register_next_step_handler(call.message, set_user_wallet)
             return
 
         create_wallets_distributors_display(call.message, rewards_data)
@@ -317,7 +334,7 @@ def mr_rewards_bot():
             name = project.get("name")
             distributor = project.get('distributor')
             button = types.InlineKeyboardButton(
-                text=name, callback_data=f"project_{name}_{distributor}"
+                text=name, callback_data=f"proj_{name}_{distributor}_s" # s stands for supported projects
             )
 
             buttons.append(button)
@@ -343,10 +360,10 @@ def mr_rewards_bot():
 
         # Create a button for each project
         for distributor in data['distributors']:
-            name = get_distributor_name_by_address(distributor)
+            name = get_distributor_name_by_address(distributor, projects)
 
             button = types.InlineKeyboardButton(
-                text=name, callback_data=f"project_{name}_{distributor}"
+                text=name, callback_data=f"proj_{name}_{distributor}_r" # r means callback for the back button will be set to "rewards"
             )
 
             buttons.append(button)
@@ -359,7 +376,7 @@ def mr_rewards_bot():
         markup.add(back_button)
         bot.send_message(message.chat.id, "Please select a project to see rewards.", reply_markup=markup, parse_mode="Markdown")
 
-    def create_rewards_display(message, data, project_name, wallet_address):
+    def create_rewards_display(message, data, project_name, wallet_address, back_to):
         # Format the rewards information
         response_text = f"🤑 *Rewards from {project_name}*\n"
         response_text += f"📬 Wallet: `{wallet_address[:6]}...{wallet_address[-4:]}`\n"
@@ -378,16 +395,21 @@ def mr_rewards_bot():
                 total_amount = token_data.get("total_amount", 0)
                 response_text += f"*{token_name}*: {total_amount:,.6f}\n"
 
-        # Check for errors
-        if data.get("error"):
-            response_text += f"\n⚠️ *Note:* {data['error']}"
-
         markup = types.InlineKeyboardMarkup()
+
+
+        # R stands for rewards callback. This is so our back button navigates the user back to
+        # the display they came from
+        if back_to == "r":
+            callback = "rewards"
+        else:
+            callback = 'supported_projects'
+
 
         # Back button to go to main menu
         back_button = types.InlineKeyboardButton(
             text="Go Back",
-            callback_data="supported_projects"
+            callback_data=callback
         )
 
         markup.add(back_button)
@@ -422,45 +444,15 @@ def get_rewards_data(wallet_address):
         print(f"Could not get rewards data for wallet address from server. Please try again later.")
         return "Could not get rewards data for wallet address from server. Please try again later."
 
-def get_distributor_address_by_name(distributor_name):
-    """Gets the distributor address for a projects name"""
-    match distributor_name:
-        case "boon":
-            return "BoonAKjwqfxj3Z1GtZHWeEMnoZLqgkSFEqRwhRsz4oQ"
-        case "distribute":
-            return "CvgM6wSDXWCZeCmZnKRQdnh4CSga3UuTXwrCXy9Ju6PC"
-        case "img":
-            return "ChGA1Wbh9WN8MDiQ4ggA5PzBspS2Z6QheyaxdVo3XdW6"
-        case "click":
-            return "9uJbttvvowG1rVpPt6GMB3mL7BuktaHaNzFQbkACfiNN"
-        case "revs":
-            return "72hnXr9PsMjp8WsnFyZjmm5vzHhTqbfouqtHBgLYdDZE"
-        case "iplr":
-            return "D8gKfTxnwBG3XPTy4ZT6cGJbz1s13htKtv9j69qbhmv4"
-        case "tnt":
-            return "GVLwP2iR4sqEX9Tos3cmQQRqAumzRumxKD42qyCbCyCC"
-        case _:
-            return None
+def get_distributor_name_by_address(distributor_address, projects):
+   """Gets the distributor name for a given distributor address by searching through supported projects"""
+   for project in projects:
+       if project.get('distributor') == distributor_address:
+           return project.get('name')
 
-def get_distributor_name_by_address(distributor_address):
-    """Gets the distributor address for a projects name"""
-    match distributor_address:
-        case "BoonAKjwqfxj3Z1GtZHWeEMnoZLqgkSFEqRwhRsz4oQ":
-            return "boon"
-        case "CvgM6wSDXWCZeCmZnKRQdnh4CSga3UuTXwrCXy9Ju6PC":
-            return "distribute"
-        case "ChGA1Wbh9WN8MDiQ4ggA5PzBspS2Z6QheyaxdVo3XdW6":
-            return "img"
-        case "9uJbttvvowG1rVpPt6GMB3mL7BuktaHaNzFQbkACfiNN":
-            return "click"
-        case "72hnXr9PsMjp8WsnFyZjmm5vzHhTqbfouqtHBgLYdDZE":
-            return "revs"
-        case "D8gKfTxnwBG3XPTy4ZT6cGJbz1s13htKtv9j69qbhmv4":
-            return "iplr"
-        case "GVLwP2iR4sqEX9Tos3cmQQRqAumzRumxKD42qyCbCyCC":
-            return "tnt"
-        case _:
-            return None
+   return None
+
+
 # Start the telegram bot
 if __name__ == "__main__":
     mr_rewards_bot()
