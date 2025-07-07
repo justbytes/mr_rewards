@@ -1,5 +1,5 @@
 /**
- * This can be used in the MongoDB Compass Shell to remove any duplicates fromt the project transfers collections
+ * This can be used in the MongoDB Compass Shell to remove any duplicates fromt the transfers collections
  * keeps the most recenet one
  */
 db.click_transfers

@@ -27,15 +27,15 @@ def initialize_program():
 # Lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
     print("Starting up the API...")
 
     # Initialize the controller and telegram bot
     initialize_program()
 
-
     yield
     print("Shutting down the API...")
+
+    # Unset the dependency variable
     remove_controller()
 
 # Initialize the app
@@ -66,8 +66,12 @@ async def root():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    # Start the telegram bot
     try:
         telegram_bot = TelegramBot()
     except Exception as e:
-        print(f"Error with tele bot {e}")
-    print("Controller connected successfully")
+        print(f"There was an error when initializing the telegram bot")
+        raise
+
+    print("App started successfully!")
