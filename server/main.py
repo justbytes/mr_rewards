@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from routes import system_config, wallet_rewards
 from routes.models import RootResponse
 from lib.Controller import Controller
-from apps.TelegramBot import TelegramBot
 from routes.dependency import set_controller, remove_controller
 from dotenv import load_dotenv
 load_dotenv()
@@ -66,12 +65,3 @@ async def root():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-    # Start the telegram bot
-    try:
-        telegram_bot = TelegramBot()
-    except Exception as e:
-        print(f"There was an error when initializing the telegram bot")
-        raise
-
-    print("App started successfully!")

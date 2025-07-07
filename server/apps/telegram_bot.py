@@ -171,7 +171,6 @@ def mr_rewards_bot():
             reply_markup=markup,
         )
 
-
     @bot.callback_query_handler(func=lambda call: call.data == "supported_projects")
     def handle_supported_projects_callback(call):
         """ Creates and displays the supported projects for the supported_projects callback """
@@ -240,9 +239,30 @@ def mr_rewards_bot():
     ##########################################################
     #                   See Rewards Handlers                 #
     ##########################################################
+    @bot.message_handler(commands=["rewards"])
+    def handle_rewards_command(message):
+        """ Displays the distributors that have sent the users configured wallet rewards """
+        if message.chat.id in user_cache:
+            rewards_data = user_cache[message.chat.id]
+        else:
+            # send user the prompt to enter wallet address
+            bot.send_message(
+                message.chat.id,
+                f"⚠️ You need to configure your wallet first.\n\n Please enter your wallet address\n (Type 'cancel' to stop)"
+
+            )
+
+            # Once they response with the wallet address we call the set_user_wallet
+            # to get the wallet data and add it to the cache
+            bot.register_next_step_handler(message, set_user_wallet)
+            return
+
+        create_wallets_distributors_display(message, rewards_data)
+
+
     @bot.callback_query_handler(func=lambda call: call.data == "rewards")
     def handle_rewards_callback(call):
-
+        """ Displays the distributors that have sent the users configured wallet rewards """
         if call.message.chat.id in user_cache:
             rewards_data = user_cache[call.message.chat.id]
         else:
@@ -451,7 +471,6 @@ def get_distributor_name_by_address(distributor_address, projects):
            return project.get('name')
 
    return None
-
 
 # Start the telegram bot
 if __name__ == "__main__":
