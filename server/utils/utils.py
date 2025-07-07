@@ -21,7 +21,6 @@ def process_distributor_transactions(transactions):
         )
     return filtered_txs
 
-
 def process_distributor_transfers(app, transactions, distributor):
     total_transfers = []
 
@@ -80,7 +79,6 @@ def process_distributor_transfers(app, transactions, distributor):
                 })
 
     return total_transfers
-
 
 def aggregate_transfers(transfers):
     # Dictionary to track totals by token type

@@ -195,6 +195,21 @@ class MongoDB:
 
         return actually_inserted_docs, total_inserted
 
+    def get_all_wallets(self):
+        """
+        Get list of all unique wallet addresses that have received transfers
+        """
+        try:
+            collection = self._db.transfers
+
+            # Get distinct wallet addresses
+            wallets = collection.distinct("wallet_address")
+            return wallets
+
+        except Exception as e:
+            print(f"Error getting all wallets")
+            return None
+
     def update_wallets(self, wallets, batch_size=1000):
         """
         Bulk update wallet balances with multiple distributors per wallet
@@ -280,7 +295,7 @@ class MongoDB:
             print(f"Error getting wallet transfers with wallet address and distributor")
             return None
 
-    def get_distributors_for_wallet(self, wallet_address):
+    def get_wallets_distributors(self, wallet_address):
         """
         Get list of all distributors that have sent transfers to a specific wallet
         """
@@ -295,21 +310,6 @@ class MongoDB:
 
         except Exception as e:
             print(f"Error getting distributors for wallet")
-            return None
-
-    def get_all_wallets(self):
-        """
-        Get list of all unique wallet addresses that have received transfers
-        """
-        try:
-            collection = self._db.transfers
-
-            # Get distinct wallet addresses
-            wallets = collection.distinct("wallet_address")
-            return wallets
-
-        except Exception as e:
-            print(f"Error getting all wallets")
             return None
 
     def create_indexes(self):

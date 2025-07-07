@@ -5,10 +5,11 @@ from dotenv import load_dotenv
 from ..db.MongoDB import MongoDB
 load_dotenv()
 
-"""""
-Creates an instance of the DB
-"""""
+
 def get_db_instance():
+    """""
+    Creates an instance of the DB
+    """""
     try:
         db = MongoDB()
         return db
@@ -16,10 +17,10 @@ def get_db_instance():
         print(f"There was an error when trying to initialize DB: {e}")
         return None
 
-"""""
-Uploads the supported projects from file to DB
-"""""
 def add_projects_from_file():
+    """""
+    Uploads the supported projects from file to DB
+    """""
     # Setup the file path
     data_dir = Path(os.getenv('PROJECTS_FILE_PATH'))
     projects_file =  data_dir / "projects.json"
@@ -42,11 +43,10 @@ def add_projects_from_file():
     except:
         raise Exception("Could not insert projects into DB")
 
-
-"""
-Filter and uploads data to DB for distributor transfer txs in a json file
-"""
 def add_distributor_transactions_from_file(distributor):
+    """
+    Filter and uploads data to DB for distributor transfer txs in a json file
+    """
     batch = []
     count = 0
 
@@ -82,7 +82,6 @@ def add_distributor_transactions_from_file(distributor):
             db.insert_distributor_transactions_batch(batch, distributor)
         except:
             raise Exception("Could not insert transfer batch into DB")
-
 
 # def test_add_project_transfers_from_file():
 #     batch = []
