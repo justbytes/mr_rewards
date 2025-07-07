@@ -1,13 +1,10 @@
 def process_distributor_transactions(transactions):
+    """ Filters a transaction and extracts the feePayer, signature, slot, timestamp, and native/spl transfers"""
     filtered_txs = []
     # Loop through txs and add filtered txs to the batch list
     for tx in transactions:
         token_transfers = tx.get("tokenTransfers", [])
         native_transfers = tx.get("nativeTransfers", [])
-
-        # Skip transactions with no transfers
-        # if len(native_transfers) < 2 or len(token_transfers) < 2:
-        #     continue
 
         filtered_txs.append(
             {
@@ -22,6 +19,7 @@ def process_distributor_transactions(transactions):
     return filtered_txs
 
 def process_distributor_transfers(app, transactions, distributor):
+    """ Creates a list of transfers """
     total_transfers = []
 
     # Loop through each transaction
@@ -81,6 +79,7 @@ def process_distributor_transfers(app, transactions, distributor):
     return total_transfers
 
 def aggregate_transfers(transfers):
+    """ Adds all of the rewards together """
     # Dictionary to track totals by token type
     wallets = {}
 

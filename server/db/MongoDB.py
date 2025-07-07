@@ -312,6 +312,21 @@ class MongoDB:
             print(f"Error getting distributors for wallet")
             return None
 
+    def get_all_transfers_for_distributor(self, distributor):
+        """
+        Get all transfer documents for a specific distributor (without _id field)
+        """
+        try:
+            collection = self._db.transfers
+
+            # Find all documents where distributor matches, exclude _id field
+            transfers = list(collection.find({"distributor": distributor}, {"_id": 0}))
+            return transfers
+
+        except Exception as e:
+            print(f"Error getting transfers for distributor {distributor}: {e}")
+            return None
+
     def create_indexes(self):
         """
         Create database indexes for better performance

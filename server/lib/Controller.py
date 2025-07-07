@@ -30,17 +30,16 @@ class Controller:
 
         print(f"Loaded {len(self.known_tokens)} known tokens")
 
-    def get_db_instance(self):
-        """Get an instance of the DB"""
-        try:
-            db = MongoDB()
+    def update_distributors_transactions(self):
+        """ This will loop through each supported project and get any new transfers """
+        projects = self.get_supported_projects_from_db()
 
-            if db is None:
-                raise Exception(f"There was an error when trying to initialize DB: {e}")
+        for project in projects:
+            distributor = project.get("distributor")
 
-            return db
-        except Exception as e:
-            raise Exception(f"There was an error when trying to initialize DB: {e}")
+            fetch_and_process_distributor_transactions(distributor)
+
+        print("Update complete")
 
     def fetch_and_process_distributor_transactions(self, distributor):
         """
@@ -148,6 +147,21 @@ class Controller:
 
         return symbol
 
+    ##########################################################
+    #                      MongoDB Getters                   #
+    ##########################################################
+    def get_db_instance(self):
+        """Get an instance of the DB"""
+        try:
+            db = MongoDB()
+
+            if db is None:
+                raise Exception(f"There was an error when trying to initialize DB: {e}")
+
+            return db
+        except Exception as e:
+            raise Exception(f"There was an error when trying to initialize DB: {e}")
+
     def get_supported_projects_from_db(self):
         return self.db.get_supported_projects()
 
@@ -160,5 +174,4 @@ class Controller:
     def get_rewards_with_wallet_address_from_db(self, wallet_address):
         return self.db.get_wallet_rewards(wallet_address)
 
-    def get_wallets_distributors_from_db(self, wallet_address):
         return self.db.get_wallets_distributors(wallet_address)
