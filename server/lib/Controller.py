@@ -4,9 +4,9 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
-from db.MongoDB import MongoDB
-from utils.utils import process_distributor_transfers, aggregate_transfers
-from utils.helius import get_token_metadata, get_distributor_transactions
+from ..db.MongoDB import MongoDB
+from ..utils.utils import process_distributor_transfers, aggregate_transfers
+from ..utils.helius import get_token_metadata, get_distributor_transactions
 
 load_dotenv()
 
@@ -58,7 +58,7 @@ class Controller:
             for transfer_batch in self.extract_transfers_from_distributor_transactions(transaction_batch.get("txs"), distributor):
 
                 # Update wallets with new rewards amounts
-                self.aggregate_rewards(transfer_batch, distributor)
+                self.aggregate_rewards(transfer_batch)
 
     def extract_transfers_from_distributor_transactions(self, transactions, distributor, batch_size=1000):
         """
@@ -85,7 +85,7 @@ class Controller:
             # Only yield the transfers that were actually inserted
             yield inserted_docs
 
-    def aggregate_rewards(self, transfers, distributor, batch_size=1000):
+    def aggregate_rewards(self, transfers, batch_size=1000):
         """
         Given a list of project transfer transactions extract each transfer from native and token transfer lists and insert it into the DB
         """
@@ -103,9 +103,9 @@ class Controller:
             aggregated_batch = aggregate_transfers(batch)
             updated = self.db.update_wallets(aggregated_batch)
             total_inserted += updated
-            # print(
-            #     f"Aggregated Rewards Batch: {batch_num}/{total_batches} Total updated: {total_inserted} "
-            # )
+            print(
+                f"Aggregated Rewards Batch: {batch_num}/{total_batches} Total updated: {total_inserted} "
+            )
 
     def get_and_add_token_metadata(self, mint_address):
         """
@@ -174,4 +174,8 @@ class Controller:
     def get_rewards_with_wallet_address_from_db(self, wallet_address):
         return self.db.get_wallet_rewards(wallet_address)
 
-        return self.db.get_wallets_distributors(wallet_address)
+    def get_all_transfers_for_distributor_from_db(self, distributor):
+        return self.db.get_all_transfers_for_distributor(distributor)
+
+    def get_all_rewards_wallets_from_db(self):
+        return self.db.get_all_rewards_wallets()

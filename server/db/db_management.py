@@ -161,7 +161,46 @@ def backup_transfers():
         return
 
 def backup_wallets():
-    pass
+    # Setup the file path
+    data_dir = Path(os.getenv('PROJECTS_FILE_PATH'))
+    wallets_dir = data_dir / "wallets"
+
+    # Get DB connection
+    db = get_db_instance()
+
+    if db is None:
+        print("Could not establish database connection")
+        return
+
+    try:
+        
+        wallets = db.get_all_rewards_wallets()
+
+        # Get current date for filename
+        current_date = datetime.now().strftime("%Y-%m-%d")
+
+        # Create date-specific backup file
+        backup_file = wallets_dir / f"{current_date}.json"
+
+        # Create backup data with timestamp
+        backup_data = {
+            "last_updated": datetime.now().isoformat(),
+            "wallet_count": len(wallets),
+            "wallets": wallets
+        }
+
+        # Write backup to date-specific file
+        with open(backup_file, 'w') as f:
+            json.dump(backup_data, f, indent=2, default=str)
+
+        print(f"Successfully backed up {len(wallets)} wallets")
+        print(f"Backup saved to: {backup_file}")
+
+        return
+
+    except Exception as e:
+        print(f"Error during backup: {e}")
+        return
 
 if __name__ == "__main__":
     backup_transfers()

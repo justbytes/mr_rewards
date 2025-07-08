@@ -11,8 +11,13 @@ def main():
    # db = MongoDB()
    # db.create_indexes()
    controller = Controller()
-   controller.fetch_and_process_distributor_transactions(distributor)
 
+   projects = controller.get_supported_projects_from_db()
+
+   for project in projects:
+      distributor = project.get("distributor")
+      transfers = controller.get_all_transfers_for_distributor_from_db(distributor)
+      controller.aggregate_rewards(transfers)
 
 if __name__ == "__main__":
    main()
