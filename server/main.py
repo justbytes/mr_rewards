@@ -16,12 +16,12 @@ def initialize_program():
     try:
         # Get and instance of the Controller which is used to read from DB
         controller = Controller()
-        # TODO have the controller poll every 5 minutes for new transactions to insert
+        controller.begin_polling()
 
         # Add controller to dependencies
         set_controller(controller)
-    except:
-        raise Exception("An error has occured when initializing the contoller")
+    except Exception as e:
+        raise Exception(f"An error has occured when initializing the contoller {e}")
 
 # Lifespan event handler
 @asynccontextmanager
