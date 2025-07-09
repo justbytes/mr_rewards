@@ -260,6 +260,5 @@ def aggregate_rewards_from_backup_transfers(controller):
         print(f"Error during aggregation: {e}")
         return False
 
-
 if __name__ == "__main__":
     backup_wallets()

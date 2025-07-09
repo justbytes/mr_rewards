@@ -4,9 +4,9 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
-from ..db.MongoDB import MongoDB
-from ..utils.utils import process_distributor_transfers, aggregate_transfers
-from ..utils.helius import get_token_metadata, get_new_distributor_transactions
+from db.MongoDB import MongoDB
+from utils.utils import process_distributor_transfers, aggregate_transfers, timer
+from utils.helius import get_token_metadata, get_new_distributor_transactions
 
 load_dotenv()
 
@@ -29,6 +29,13 @@ class Controller:
         self.unknown_token_cache = {}
 
         print(f"Loaded {len(self.known_tokens)} known tokens")
+
+
+    def begin_polling(self):
+        """
+        Runs the update distributors function every five minutes using the timer utility to check for new transactions
+        """
+        timer(self.update_distributors_transactions)
 
     def update_distributors_transactions(self):
         """ This will loop through each supported project and get any new transfers """
