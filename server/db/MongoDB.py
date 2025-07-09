@@ -71,7 +71,7 @@ class MongoDB:
             print(f"Error getting wallet transfers")
             return None
 
-    def get_last_tx_signature_for_distributor(self, distributor):
+    def get_newest_tx_signature_for_distributor(self, distributor):
         """
         Get the most recent signature for a transaction of a given distributor
         """
@@ -90,7 +90,7 @@ class MongoDB:
             print(f"Error getting the last tx signature")
             return None
 
-    def update_last_tx_signature_for_distributor(self, distributor, new_sig):
+    def update_newest_tx_signature_for_distributor(self, distributor, new_sig):
         """
         Update the most recent signature for a transaction of a given distributor
         """
@@ -224,8 +224,8 @@ class MongoDB:
         except Exception as e:
             print(f"Error getting all wallets: {e}")
             return None
-            
-    def update_wallets(self, wallets, batch_size=1000):
+
+    def insert_wallet_rewards(self, wallets, batch_size=1000):
         """
         Bulk update wallet balances with multiple distributors per wallet
         """
