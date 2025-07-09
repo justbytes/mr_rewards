@@ -173,7 +173,7 @@ def backup_wallets():
         return
 
     try:
-        
+
         wallets = db.get_all_rewards_wallets()
 
         # Get current date for filename
@@ -202,5 +202,64 @@ def backup_wallets():
         print(f"Error during backup: {e}")
         return
 
+def aggregate_rewards_from_backup_transfers(controller):
+    """ Loops through the transfer dirs projects aggregates all of the rewards """
+    data_dir = Path(os.getenv('PROJECTS_FILE_PATH'))
+    transfers_dir = data_dir / "transfers"
+
+    if not transfers_dir.exists():
+        print("Transfers directory does not exist")
+        return False
+
+    try:
+        total_files_processed = 0
+        total_transfers_processed = 0
+
+        # Iterate through each distributor directory
+        for distributor_entry in os.scandir(transfers_dir):
+            if not distributor_entry.is_dir():
+                continue
+
+            distributor_name = distributor_entry.name
+            print(f"Processing distributor: {distributor_name}")
+
+            # Iterate through each backup file in the distributor directory
+            for file_entry in os.scandir(distributor_entry.path):
+                if not file_entry.is_file() or not file_entry.name.endswith('.json'):
+                    continue
+
+                print(f"  Processing file: {file_entry.name}")
+
+                try:
+                    # Load the backup file
+                    with open(file_entry.path, 'r') as f:
+                        backup_data = json.load(f)
+
+                    # Get the transfers from the backup file
+                    transfers = backup_data.get("transfers", [])
+
+                    if transfers:
+                        # Process transfers using controller
+                        controller.aggregate_rewards(transfers)
+                        total_transfers_processed += len(transfers)
+                        print(f"    Processed {len(transfers)} transfers")
+
+                    total_files_processed += 1
+
+                except Exception as e:
+                    print(f"    Error processing {file_entry.name}: {e}")
+                    continue
+
+        print(f"\nProcessing complete!")
+        print(f"  - {total_files_processed} files processed")
+        print(f"  - {total_transfers_processed} total transfers processed")
+
+        return True
+
+    except Exception as e:
+        print(f"Error during aggregation: {e}")
+        return False
+
+
 if __name__ == "__main__":
-    backup_transfers()
+    backup_wallets()

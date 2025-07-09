@@ -6,7 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from ..db.MongoDB import MongoDB
 from ..utils.utils import process_distributor_transfers, aggregate_transfers
-from ..utils.helius import get_token_metadata, get_distributor_transactions
+from ..utils.helius import get_token_metadata, get_new_distributor_transactions
 
 load_dotenv()
 
@@ -37,22 +37,27 @@ class Controller:
         for project in projects:
             distributor = project.get("distributor")
 
-            fetch_and_process_distributor_transactions(distributor)
+            self.fetch_and_process_new_distributor_transactions(distributor)
 
         print("Update complete")
 
-    def fetch_and_process_distributor_transactions(self, distributor):
+    def fetch_and_process_new_distributor_transactions(self, distributor):
         """
         Gets a list of transactions starting from last signature from the distributor_transfers collection
         """
 
         # Get the last tx signature so we can start from the at point
-        last_sig = self.db.get_last_tx_signature_for_distributor(distributor)
+        last_sig = self.db.get_newest_tx_signature_for_distributor(distributor)
+        updated_sig = False
 
         # Get the all of the transactions starting from the last signature by calling the distributor_transfer_generator
-        for transaction_batch in get_distributor_transactions(distributor, last_sig):
-            # Update the projects last signature
-            self.db.update_last_tx_signature_for_distributor(distributor, transaction_batch.get('last_sig'))
+        for transaction_batch in get_new_distributor_transactions(distributor, last_sig):
+
+            # Save the new sig if we haven't already
+            if not updated_sig:
+                # Update the projects last signature
+                self.db.update_newest_tx_signature_for_distributor(distributor, transaction_batch.get('last_sig'))
+                updated_sig = True # Set to true so we don't keep updating the same value
 
             # Extract the transfers from the transactions and insert them into the db
             for transfer_batch in self.extract_transfers_from_distributor_transactions(transaction_batch.get("txs"), distributor):
@@ -101,11 +106,11 @@ class Controller:
 
 
             aggregated_batch = aggregate_transfers(batch)
-            updated = self.db.update_wallets(aggregated_batch)
+            updated = self.db.insert_wallet_rewards(aggregated_batch)
             total_inserted += updated
-            print(
-                f"Aggregated Rewards Batch: {batch_num}/{total_batches} Total updated: {total_inserted} "
-            )
+            # print(
+            #     f"Aggregated Rewards Batch: {batch_num}/{total_batches} Total updated: {total_inserted} "
+            # )
 
     def get_and_add_token_metadata(self, mint_address):
         """
