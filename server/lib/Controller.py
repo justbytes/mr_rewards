@@ -33,9 +33,9 @@ class Controller:
 
     def begin_polling(self):
         """
-        Runs the update distributors function every five minutes using the timer utility to check for new transactions
+        Runs the update distributors function every five minutes(300 seconds) using the timer utility to check for new transactions
         """
-        timer(self.update_distributors_transactions)
+        timer(self.update_distributors_transactions, 300)
 
     def update_distributors_transactions(self):
         """ This will loop through each supported project and get any new transfers """
