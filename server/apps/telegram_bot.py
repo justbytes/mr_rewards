@@ -5,6 +5,9 @@ import requests
 from telebot import types
 from pathlib import Path
 from dotenv import load_dotenv
+from datetime import datetime
+from ..utils.utils import timer
+
 load_dotenv()
 
 
@@ -26,7 +29,7 @@ def mr_rewards_bot():
     ##########################################################
     @bot.message_handler(commands=["start", "home"])
     def handle_main_menu_command(message):
-        """ Create and display the main menu when /start or /home are sent by the user"""
+        """Create and display the main menu when /start or /home are sent by the user"""
 
         # Build the main menu view passing the chat id to check if the user
         # added a wallet already
@@ -34,10 +37,7 @@ def mr_rewards_bot():
 
         # Display the main menu
         bot.send_message(
-            message.chat.id,
-            response_text,
-            parse_mode="Markdown",
-            reply_markup=markup
+            message.chat.id, response_text, parse_mode="Markdown", reply_markup=markup
         )
 
     @bot.callback_query_handler(func=lambda call: call.data == "home")
@@ -57,34 +57,33 @@ def mr_rewards_bot():
             call.message.chat.id,
             call.message.message_id,
             parse_mode="Markdown",
-            reply_markup=markup
+            reply_markup=markup,
         )
 
     ##########################################################
-    #                   Set Wallet Handlers                  #
+    #                   User Cache Handlers                  #
     ##########################################################
     @bot.message_handler(commands=["set_wallet"])
     def handle_set_wallet_command(message):
         """
-        Prompts the user for their wallet address and calls the set_user_wallet function
+        Prompts the user for their wallet address and calls the set_user_wallet_data function
         when the /set_wallet command is sent by the user
         """
 
         # Prompt user to enter the address
         bot.send_message(
-            message.chat.id, # Chat id for our user
-            f"Please enter your wallet address\n (Type 'cancel' to stop)"
+            message.chat.id,  # Chat id for our user
+            f"Please enter your wallet address\n (Type 'cancel' to stop)",
         )
 
-
-        # Once they response with the wallet address we call the set_user_wallet
+        # Once they response with the wallet address we call the set_user_wallet_data
         # to get the wallet data and add it to the cache
-        bot.register_next_step_handler(message, set_user_wallet)
+        bot.register_next_step_handler(message, set_user_wallet_data)
 
     @bot.callback_query_handler(func=lambda call: call.data == "set_wallet")
     def handle_set_wallet_callback(call):
         """
-        Prompts the user for their wallet address and calls the set_user_wallet function
+        Prompts the user for their wallet address and calls the set_user_wallet_data function
         for the set_wallet callback
         """
 
@@ -94,25 +93,22 @@ def mr_rewards_bot():
         # send user the prompt to enter wallet address
         bot.send_message(
             call.message.chat.id,
-            f"Please enter your wallet address\n (Type 'cancel' to stop)"
+            f"Please enter your wallet address\n (Type 'cancel' to stop)",
         )
 
-        # Once they response with the wallet address we call the set_user_wallet
+        # Once they response with the wallet address we call the set_user_wallet_data
         # to get the wallet data and add it to the cache
-        bot.register_next_step_handler(call.message, set_user_wallet)
+        bot.register_next_step_handler(call.message, set_user_wallet_data)
 
-    def set_user_wallet(message):
-        """ Adds a user chat id and wallet data into the user cache"""
+    def set_user_wallet_data(message):
+        """Adds a user chat id and wallet data into the user cache"""
         # Remove whitespaces from string
         wallet_address = message.text.strip()
 
         # Users can cancel the operation by typing cancel and will be redirected to
         # the main menu
         if wallet_address.lower() == "cancel":
-            bot.send_message(
-                message.chat.id,
-                "❌ Operation cancelled."
-            )
+            bot.send_message(message.chat.id, "❌ Operation cancelled.")
             handle_main_menu_command(message)
             return
 
@@ -121,9 +117,9 @@ def mr_rewards_bot():
             bot.send_message(
                 message.chat.id,
                 f"❌ Invalid wallet address (length: {len(wallet_address)}). \n\n"
-                f"Please enter a valid wallet address (32-44 characters) or type 'cancel' to stop:"
+                f"Please enter a valid wallet address (32-44 characters) or type 'cancel' to stop:",
             )
-            bot.register_next_step_handler(message, set_user_wallet)
+            bot.register_next_step_handler(message, set_user_wallet_data)
             return
 
         # Fetch the rewards data
@@ -132,8 +128,7 @@ def mr_rewards_bot():
         # If theres none notify the user and redirect back to supported projects
         if rewards_data is None:
             bot.send_message(
-                message.chat.id,
-                f"❌ No rewards data found for {wallet_address}."
+                message.chat.id, f"❌ No rewards data found for {wallet_address}."
             )
             handle_main_menu_command(message)
             return
@@ -141,25 +136,112 @@ def mr_rewards_bot():
         # If the data is of type string then there was an error and we will print the
         # exception to the user and redirect back to supported projects
         elif isinstance(rewards_data, str):
-            bot.send_message(
-                message.chat.id,
-                f"❌ {rewards_data}"
-            )
+            bot.send_message(message.chat.id, f"❌ {rewards_data}")
             handle_main_menu_command(message)
             return
 
+        data = {
+            "rewards_data": rewards_data,
+            "last_updated": datetime.now().isoformat(),
+        }
+
         # Add the wallet data to the cache
-        user_cache[message.chat.id] = rewards_data
+        user_cache[message.chat.id] = data
 
         # Return to the main menu
         handle_main_menu_command(message)
+
+    def get_user_wallet_data(chat_id):
+        """
+        Get a users wallet with their chat id and updates the cache if the data
+        is stale
+        """
+
+        # Check if user exists in cache
+        if chat_id not in user_cache:
+            return None
+
+        # Get cached data
+        cached_data = user_cache[chat_id]
+
+        # Parse the timestamp
+        last_updated = datetime.fromisoformat(cached_data["last_updated"])
+        current_time = datetime.now()
+
+        print(last_updated)
+        print(current_time)
+
+        # Check if data is older than 5 minutes
+        time_diff = current_time - last_updated
+        if time_diff.total_seconds() > 300:  # 300 seconds = 5 minutes
+            # Data is stale, need to refetch
+            print("🔄 Updating wallet data")
+
+            # Get users wallet
+            wallet_address = cached_data["rewards_data"].get("wallet_address")
+
+            # Refetch the rewards data
+            rewards_data = get_rewards_data(wallet_address)
+
+            # Update cache with fresh data
+            updated_data = {
+                "rewards_data": rewards_data,
+                "last_updated": datetime.now().isoformat(),
+            }
+
+            # Update cache with the new data
+            user_cache[chat_id] = updated_data
+
+            return updated_data["rewards_data"]
+
+        # Data is fresh, return cached rewards data
+        return cached_data["rewards_data"]
+
+    def clean_user_cache():
+
+        """
+        Removes stale cache entries that are older than 1 hour and 15 minutes
+        """
+        current_time = datetime.now()
+
+        # Get list of chat_ids to remove (can't modify dict while iterating)
+        chat_ids_to_remove = []
+
+        for chat_id, cached_data in user_cache.items():
+            try:
+                # Parse the timestamp
+                last_updated = datetime.fromisoformat(cached_data["last_updated"])
+
+                # Check if data is older than 1 hour 15 minutes
+                time_diff = current_time - last_updated
+                if time_diff.total_seconds() > 4500:
+                    chat_ids_to_remove.append(chat_id)
+
+            except (KeyError, ValueError) as e:
+                # If there's an issue with the timestamp, consider it stale and remove it
+                print(f"Warning: Invalid cache entry for chat_id {chat_id}: {e}")
+                chat_ids_to_remove.append(chat_id)
+
+        # Remove stale entries
+        removed_count = 0
+        for chat_id in chat_ids_to_remove:
+            del user_cache[chat_id]
+            removed_count += 1
+
+        if removed_count > 0:
+            print(f"🧹 Cache cleanup: Removed {removed_count} stale entries")
+        else:
+            print("🧹 Cache cleanup: No stale entries found")
+
+        return removed_count
+
 
     ##########################################################
     #               Supported Projects Handlers              #
     ##########################################################
     @bot.message_handler(commands=["supported_projects"])
     def handle_supported_projects_command(message):
-        """ Creates and displays the supported projects if the /supported_projects comamand is used """
+        """Creates and displays the supported projects if the /supported_projects comamand is used"""
 
         # Build the supported projects display
         markup = create_supported_projects_display()
@@ -173,7 +255,7 @@ def mr_rewards_bot():
 
     @bot.callback_query_handler(func=lambda call: call.data == "supported_projects")
     def handle_supported_projects_callback(call):
-        """ Creates and displays the supported projects for the supported_projects callback """
+        """Creates and displays the supported projects for the supported_projects callback"""
 
         # Acknowledge the call
         bot.answer_callback_query(call.id)
@@ -203,35 +285,37 @@ def mr_rewards_bot():
         parts = callback_data.rsplit("_", 2)
         name = parts[0]
         distributor = parts[1]
-        back_to = parts[2] # This is the callback for the back button on the create_rewards_display
+        back_to = parts[2] # Points to where we should navigate the user if they click the "Go Back" button
 
-        # Check if we have a wallet in the cache for the chat id
-        if call.message.chat.id in user_cache:
-            rewards_data = user_cache[call.message.chat.id]
-        else:
+        # Check the cache to see if we have the users wallet already stored
+        rewards_data = get_user_wallet_data(call.message.chat.id)
+
+        # If users wallet isn't in the cache we will prompt them to add it
+        if rewards_data is None:
             # send user the prompt to enter wallet address
             bot.send_message(
                 call.message.chat.id,
-                f"⚠️ You need to configure your wallet first.\n\n Please enter your wallet address\n (Type 'cancel' to stop)"
+                f"⚠️ No wallet data found please configure your wallet first.\n\n Please enter your wallet address\n (Type 'cancel' to stop)",
             )
 
-            # Once they response with the wallet address we call the set_user_wallet
+            # Once they response with the wallet address we call the set_user_wallet_data
             # to get the wallet data and add it to the cache
-            bot.register_next_step_handler(call.message, set_user_wallet)
+            bot.register_next_step_handler(call.message, set_user_wallet_data)
             return
 
         # Get the users wallet address and rewards amounts for the selected distributor
-        wallet_address = rewards_data.get('wallet_address')
-        rewards_from_project = rewards_data['distributors'].get(distributor)
+        wallet_address = rewards_data.get("wallet_address")
+        rewards_from_project = rewards_data["distributors"].get(distributor)
 
         # If we have rewards build the rewards display otherwise notify the user that
         # they didn't recieve rewards from that distributor
         if rewards_from_project:
-            create_rewards_display(call.message, rewards_from_project, name, wallet_address, back_to)
+            create_rewards_display(
+                call.message, rewards_from_project, name, wallet_address, back_to
+            )
         else:
             bot.send_message(
-                call.message.chat.id,
-                f"❌ No rewards recieved from {name}"
+                call.message.chat.id, f"❌ No rewards recieved from {name}"
             )
             handle_supported_projects_command(call.message)
             return
@@ -241,43 +325,48 @@ def mr_rewards_bot():
     ##########################################################
     @bot.message_handler(commands=["rewards"])
     def handle_rewards_command(message):
-        """ Displays the distributors that have sent the users configured wallet rewards """
-        if message.chat.id in user_cache:
-            rewards_data = user_cache[message.chat.id]
-        else:
+        """Displays the distributors that have sent the users configured wallet rewards"""
+        print(f"FROM REWARDS COMMAND {message.chat.id}")
+        # Check the cache for a the user configured wallet
+        rewards_data = get_user_wallet_data(message.chat.id)
+
+        # If there is no data then we don't have the users wallet in the cache so we will prompt them to add one
+        if rewards_data is None:
             # send user the prompt to enter wallet address
             bot.send_message(
                 message.chat.id,
-                f"⚠️ You need to configure your wallet first.\n\n Please enter your wallet address\n (Type 'cancel' to stop)"
-
+                f"⚠️ You need to configure your wallet first.\n\n Please enter your wallet address\n (Type 'cancel' to stop)",
             )
 
-            # Once they response with the wallet address we call the set_user_wallet
+            # Once they response with the wallet address we call the set_user_wallet_data
             # to get the wallet data and add it to the cache
-            bot.register_next_step_handler(message, set_user_wallet)
+            bot.register_next_step_handler(message, set_user_wallet_data)
             return
 
+        # Create the display of projects that have issued rewards
         create_wallets_distributors_display(message, rewards_data)
-
 
     @bot.callback_query_handler(func=lambda call: call.data == "rewards")
     def handle_rewards_callback(call):
-        """ Displays the distributors that have sent the users configured wallet rewards """
-        if call.message.chat.id in user_cache:
-            rewards_data = user_cache[call.message.chat.id]
-        else:
+        """Displays the distributors that have sent the users configured wallet rewards"""
+
+        # Check the cache for a the user configured wallet
+        rewards_data = get_user_wallet_data(call.message.chat.id)
+
+        # If there is no data then we don't have the users wallet in the cache so we will prompt them to add one
+        if rewards_data is None:
             # send user the prompt to enter wallet address
             bot.send_message(
                 call.message.chat.id,
-                f"⚠️ You need to configure your wallet first.\n\n Please enter your wallet address\n (Type 'cancel' to stop)"
-
+                f"⚠️ You need to configure your wallet first.\n\n Please enter your wallet address\n (Type 'cancel' to stop)",
             )
 
-            # Once they response with the wallet address we call the set_user_wallet
+            # Once they response with the wallet address we call the set_user_wallet_data
             # to get the wallet data and add it to the cache
-            bot.register_next_step_handler(call.message, set_user_wallet)
+            bot.register_next_step_handler(call.message, set_user_wallet_data)
             return
 
+        # Create the display of projects that have issued rewards
         create_wallets_distributors_display(call.message, rewards_data)
 
     ##########################################################
@@ -285,7 +374,7 @@ def mr_rewards_bot():
     ##########################################################
     @bot.message_handler(func=lambda message: True)
     def handle_unknown_command(message):
-        """ Tells the user that they used an unkown command """
+        """Tells the user that they used an unkown command"""
         bot.reply_to(message, "Unknown command. Use /home to go back to the main menu!")
 
     ##########################################################
@@ -299,34 +388,39 @@ def mr_rewards_bot():
         markup = types.InlineKeyboardMarkup()
         wallet = None
 
+        # Check if we have a users configured wallet in the cache
+        rewards_data = get_user_wallet_data(chat_id)
 
-        if chat_id in user_cache:
-            wallet_address = user_cache[chat_id].get('wallet_address')
+        # If we have a response then there will be a wallet address
+        if rewards_data is not None:
+            wallet_address = rewards_data.get("wallet_address")
             wallet = f"{wallet_address[:4]}...{wallet_address[-4:]}"
 
+        # See rewards button
         rewards_button = types.InlineKeyboardButton(
-            text="See Rewards",
-            callback_data="rewards"
+            text="See Rewards", callback_data="rewards"
         )
 
+        # Supported projects button
         projects_button = types.InlineKeyboardButton(
-            text="Supported Projects",
-            callback_data="supported_projects"
+            text="Supported Projects", callback_data="supported_projects"
         )
 
+        # Configure wallet button
         users_wallet_button = types.InlineKeyboardButton(
-            text="Configure Wallet",
-            callback_data="set_wallet"
+            text="Configure Wallet", callback_data="set_wallet"
         )
 
+        # Add the elements to the markup
         markup.add(rewards_button)
         markup.add(projects_button)
         markup.add(users_wallet_button)
 
-
+        # Add the message body
         response_text = "⎑⎑⎑ Mr. Rewards ⎑⎑⎑\n"
         response_text += "---------------------\n"
 
+        # If we have a wallet address then we should display it otherwise just display the N/A
         if wallet is not None:
             response_text += f"*📬 Wallet*: {wallet}\n\n"
         else:
@@ -342,26 +436,24 @@ def mr_rewards_bot():
         markup = types.InlineKeyboardMarkup()
 
         # Back button to go to main menu
-        back_button = types.InlineKeyboardButton(
-            text="Go Back",
-            callback_data="home"
-        )
+        back_button = types.InlineKeyboardButton(text="Go Back", callback_data="home")
 
         buttons = []
 
         # Create a button for each project
         for project in projects:
             name = project.get("name")
-            distributor = project.get('distributor')
+            distributor = project.get("distributor")
             button = types.InlineKeyboardButton(
-                text=name, callback_data=f"proj_{name}_{distributor}_s" # s stands for supported projects
+                text=name,
+                callback_data=f"proj_{name}_{distributor}_s",  # s stands for supported projects
             )
 
             buttons.append(button)
 
         # Add the buttons to the markup with the set max width
         for i in range(0, len(buttons), 3):
-            row = buttons[i:i+3]  # Get 3 buttons at a time
+            row = buttons[i : i + 3]  # Get 3 buttons at a time
             markup.row(*row)
 
         markup.add(back_button)
@@ -371,30 +463,33 @@ def mr_rewards_bot():
         markup = types.InlineKeyboardMarkup()
 
         # Back button to go to main menu
-        back_button = types.InlineKeyboardButton(
-            text="Go Back",
-            callback_data="home"
-        )
+        back_button = types.InlineKeyboardButton(text="Go Back", callback_data="home")
 
         buttons = []
 
         # Create a button for each project
-        for distributor in data['distributors']:
+        for distributor in data["distributors"]:
             name = get_distributor_name_by_address(distributor, projects)
 
             button = types.InlineKeyboardButton(
-                text=name, callback_data=f"proj_{name}_{distributor}_r" # r means callback for the back button will be set to "rewards"
+                text=name,
+                callback_data=f"proj_{name}_{distributor}_r",  # r means callback for the back button will be set to "rewards"
             )
 
             buttons.append(button)
 
         # Add the buttons to the markup with the set max width
         for i in range(0, len(buttons), 3):
-            row = buttons[i:i+3]  # Get 3 buttons at a time
+            row = buttons[i : i + 3]  # Get 3 buttons at a time
             markup.row(*row)
 
         markup.add(back_button)
-        bot.send_message(message.chat.id, "Please select a project to see rewards.", reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(
+            message.chat.id,
+            "Please select a project to see rewards.",
+            reply_markup=markup,
+            parse_mode="Markdown",
+        )
 
     def create_rewards_display(message, data, project_name, wallet_address, back_to):
         # Format the rewards information
@@ -417,42 +512,42 @@ def mr_rewards_bot():
 
         markup = types.InlineKeyboardMarkup()
 
-
         # R stands for rewards callback. This is so our back button navigates the user back to
         # the display they came from
         if back_to == "r":
             callback = "rewards"
         else:
-            callback = 'supported_projects'
-
+            callback = "supported_projects"
 
         # Back button to go to main menu
-        back_button = types.InlineKeyboardButton(
-            text="Go Back",
-            callback_data=callback
-        )
+        back_button = types.InlineKeyboardButton(text="Go Back", callback_data=callback)
 
         markup.add(back_button)
         # Send the user the data
-        bot.send_message(message.chat.id, response_text, reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(
+            message.chat.id, response_text, reply_markup=markup, parse_mode="Markdown"
+        )
+
+     # Start a timer that cleans the users cache every 1 hr and 15 minutes(4500 seconds)
+    timer(clean_user_cache, 4500)
 
     # Begin polling
     bot.infinity_polling()
+
 
 ##########################################################
 #                        API Calls                       #
 ##########################################################
 def get_supported_projects():
     """This calls the API to get the list of supported projects"""
-    url = (
-        f"{os.getenv('API_URL')}/supported_projects"
-    )
+    url = f"{os.getenv('API_URL')}/supported_projects"
     try:
         response = requests.get(url, timeout=30)
         return response.json()
     except Exception as e:
         print(f"Could not get supported projects from server. Please try again later.")
         raise
+
 
 def get_rewards_data(wallet_address):
     """This calls the API to get the rewards data for a given wallet address"""
@@ -461,16 +556,20 @@ def get_rewards_data(wallet_address):
         response = requests.get(url, timeout=30)
         return response.json()
     except Exception as e:
-        print(f"Could not get rewards data for wallet address from server. Please try again later.")
+        print(
+            f"Could not get rewards data for wallet address from server. Please try again later."
+        )
         return "Could not get rewards data for wallet address from server. Please try again later."
 
-def get_distributor_name_by_address(distributor_address, projects):
-   """Gets the distributor name for a given distributor address by searching through supported projects"""
-   for project in projects:
-       if project.get('distributor') == distributor_address:
-           return project.get('name')
 
-   return None
+def get_distributor_name_by_address(distributor_address, projects):
+    """Gets the distributor name for a given distributor address by searching through supported projects"""
+    for project in projects:
+        if project.get("distributor") == distributor_address:
+            return project.get("name")
+
+    return None
+
 
 # Start the telegram bot
 if __name__ == "__main__":
