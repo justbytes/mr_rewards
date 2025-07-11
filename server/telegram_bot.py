@@ -23,6 +23,9 @@ def mr_rewards_bot():
     # Cache that stores users chat ids which holds their wallet data
     redis_client = redis.from_url(os.getenv("REDIS_URL"))
 
+    # Main menu photo path
+    main_menu_photo_path = Path("assets/mr_rewards.png")
+
     ##########################################################
     #                    Main Menu Handlers                  #
     ##########################################################
@@ -34,10 +37,15 @@ def mr_rewards_bot():
         # added a wallet already
         markup, response_text = create_main_menu_display(message)
 
-        # Display the main menu
-        bot.send_message(
-            message.chat.id, response_text, parse_mode="Markdown", reply_markup=markup
-        )
+        # Display the main menu with photo
+        with open(main_menu_photo_path, 'rb') as photo:
+            bot.send_photo(
+                message.chat.id,
+                photo,
+                caption=response_text,
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
 
     @bot.callback_query_handler(func=lambda call: call.data == "home")
     def handle_main_menu_callback(call):
@@ -50,14 +58,15 @@ def mr_rewards_bot():
         # added a wallet already
         markup, response_text = create_main_menu_display(call.message)
 
-        # Display the main menu
-        bot.edit_message_text(
-            response_text,
-            call.message.chat.id,
-            call.message.message_id,
-            parse_mode="Markdown",
-            reply_markup=markup,
-        )
+        # Display the main menu with photo
+        with open(main_menu_photo_path, 'rb') as photo:
+            bot.send_photo(
+                call.message.chat.id,
+                photo,
+                caption=response_text,
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
 
     ##########################################################
     #                   User Cache Handlers                  #
@@ -243,12 +252,36 @@ def mr_rewards_bot():
         # Build the supported projects display
         markup = create_supported_projects_display()
 
-        # Displays the projects
-        bot.send_message(
-            message.chat.id,
-            "Please select a project to check rewards:",
-            reply_markup=markup,
-        )
+        # Build the supported projects display
+        try:
+            markup = create_supported_projects_display()
+        except Exception as e:
+            print(f"Error creating markup")
+            bot.send_message(message.chat.id, "❌ Error loading projects. Please try again.")
+            return
+
+        # Delete the old message (photo message) and send a new text message
+        try:
+            bot.delete_message(message.chat.id, message.message_id)
+            # print("Message deleted successfully")
+        except Exception as e:
+            print(f"Error deleting message")
+            # Continue anyway - deletion failure shouldn't stop us
+
+        # Send new message
+        try:
+            sent_message = bot.send_message(
+                message.chat.id,
+                "Please select a project to check rewards:",
+                reply_markup=markup,
+            )
+        except Exception as e:
+            print(f"Error sending message in supported projects callback")
+            # Send a fallback message without markup
+            try:
+                bot.send_message(message.chat.id, "❌ Error loading projects menu. Please try /home to restart.")
+            except Exception as fallback_error:
+                print(f"Fallback message also failed: {fallback_error}")
 
     @bot.callback_query_handler(func=lambda call: call.data == "supported_projects")
     def handle_supported_projects_callback(call):
@@ -258,15 +291,35 @@ def mr_rewards_bot():
         bot.answer_callback_query(call.id)
 
         # Build the supported projects display
-        markup = create_supported_projects_display()
+        try:
+            markup = create_supported_projects_display()
+        except Exception as e:
+            print(f"Error creating markup")
+            bot.send_message(call.message.chat.id, "❌ Error loading projects. Please try again.")
+            return
 
-        # Edit the original message or send a new one
-        bot.edit_message_text(
-            "Please select a project to check rewards:",
-            call.message.chat.id,
-            call.message.message_id,
-            reply_markup=markup,
-        )
+        # Delete the old message (photo message) and send a new text message
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+            # print("Message deleted successfully")
+        except Exception as e:
+            print(f"Error deleting message")
+            # Continue anyway - deletion failure shouldn't stop us
+
+        # Send new message
+        try:
+            sent_message = bot.send_message(
+                call.message.chat.id,
+                "Please select a project to check rewards:",
+                reply_markup=markup,
+            )
+        except Exception as e:
+            print(f"Error sending message in supported projects callback")
+            # Send a fallback message without markup
+            try:
+                bot.send_message(call.message.chat.id, "❌ Error loading projects menu. Please try /home to restart.")
+            except Exception as fallback_error:
+                print(f"Fallback message also failed: {fallback_error}")
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith("proj_"))
     def handle_supported_project_selection(call):
@@ -325,7 +378,6 @@ def mr_rewards_bot():
     @bot.message_handler(commands=["rewards"])
     def handle_rewards_command(message):
         """Displays the distributors that have sent the users configured wallet rewards"""
-        print(f"FROM REWARDS COMMAND {message.chat.id}")
         # Check the cache for a the user configured wallet
         rewards_data = get_user_wallet_data(message)
 
@@ -397,7 +449,7 @@ def mr_rewards_bot():
         wallet = None
 
         # Check if we have a users configured wallet in the cache
-        rewards_data = get_user_wallet_data(chat_id)
+        rewards_data = get_user_wallet_data(message)
 
         if rewards_data == "error":
             return
