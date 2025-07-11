@@ -116,7 +116,7 @@ def get_new_distributor_transactions(
 
             # If no transactions returned, we've reached the end
             if not txs:
-                print("No more transactions!")
+                # print("No more transactions!")
                 break
 
             # Holds txs that have been checked to ensure they don't contain the until sig

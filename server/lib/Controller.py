@@ -46,7 +46,7 @@ class Controller:
 
             self.fetch_and_process_new_distributor_transactions(distributor)
 
-        print("Update complete")
+        # print("Update complete")
 
     def fetch_and_process_new_distributor_transactions(self, distributor):
         """
