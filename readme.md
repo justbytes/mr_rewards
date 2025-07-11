@@ -23,9 +23,10 @@ Rewards/Tax/Ponzi tokens on Solana have built-in functionality to send holders r
 - Automated data insertion with conflict resolution
 
 **Telegram Bot Integration**
-Conversational interface with Redis cache management and callback handlers
-Interactive menus for project selection and wallet address input
-Real-time API integration for instant reward calculations
+
+- Conversational interface utilizing Redis to cache user rewards data
+- Interactive menus for project selection and wallet address input
+- Real-time API integration for instant reward calculations
 
 ## 🛠 Tech Stack
 
