@@ -11,5 +11,7 @@ fastapi = "*"
 pytelegrambotapi = "*"
 black = "*"
 pymongo = {extras = ["srv"], version = "==3.12"}
+slowapi = "*"
+redis = "*"
 
 [dev-packages]

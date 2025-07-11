@@ -1,14 +1,20 @@
 import os
 import uvicorn
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from routes import system_config, wallet_rewards
 from routes.models import RootResponse
 from lib.Controller import Controller
+from limiter import limiter
 from routes.dependency import set_controller, remove_controller
 from dotenv import load_dotenv
 load_dotenv()
+
 
 # Initialize the connection to the MongoDB and asign it the global variable
 def initialize_program():
@@ -45,12 +51,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Setup the Redis rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 # Add the routes to the app
 app.include_router(wallet_rewards.router, prefix="/rewards", tags=["rewards"])
 app.include_router(system_config.router, tags=["system"])
 
 @app.get("/", response_model=RootResponse)
-async def root():
+@limiter.limit("30/minute")
+async def root(request: Request):
     """Root endpoint with API information"""
     return {
         "message": "Wallet Rewards API",

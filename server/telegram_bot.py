@@ -1,15 +1,14 @@
 import os
 import json
 import telebot
+import redis
 import requests
 from telebot import types
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime
-from ..utils.utils import timer
 
 load_dotenv()
-
 
 def mr_rewards_bot():
     """Telegram bot that queires the rewards tracker api to get a users rewards data"""
@@ -22,7 +21,7 @@ def mr_rewards_bot():
     projects = get_supported_projects()
 
     # Cache that stores users chat ids which holds their wallet data
-    user_cache = {}
+    redis_client = redis.from_url(os.getenv("REDIS_URL"))
 
     ##########################################################
     #                    Main Menu Handlers                  #
@@ -146,7 +145,16 @@ def mr_rewards_bot():
         }
 
         # Add the wallet data to the cache
-        user_cache[message.chat.id] = data
+        cache_key = f"user_id:{message.chat.id}"
+        try:
+            redis_client.setex(cache_key, 3600, json.dumps(data))
+        except Exception as e:
+            bot.send_message(
+                    message.chat.id, f"❌ Couldn't save wallet address. Please try again later."
+                )
+            handle_main_menu_command(message)
+            return
+
 
         # Return to the main menu
         handle_main_menu_command(message)
@@ -157,31 +165,50 @@ def mr_rewards_bot():
         is stale
         """
 
-        # Check if user exists in cache
-        if chat_id not in user_cache:
-            return None
+        # Get the cache data
+        try:
+            cache_key = f"user_id:{chat_id}"
+            cached_data_json = redis_client.get(cache_key)
 
-        # Get cached data
-        cached_data = user_cache[chat_id]
+            # Check if data exists in cache
+            if cached_data_json is None:
+                return None
+
+            # Parse the JSON data
+            cached_data = json.loads(cached_data_json)
+        except Exception as e:
+            print("There was an error getting the cache data")
+            redis_client.delete(cache_key)
+            return None
 
         # Parse the timestamp
         last_updated = datetime.fromisoformat(cached_data["last_updated"])
         current_time = datetime.now()
 
-        print(last_updated)
-        print(current_time)
-
         # Check if data is older than 5 minutes
         time_diff = current_time - last_updated
         if time_diff.total_seconds() > 300:  # 300 seconds = 5 minutes
-            # Data is stale, need to refetch
-            print("🔄 Updating wallet data")
 
             # Get users wallet
             wallet_address = cached_data["rewards_data"].get("wallet_address")
 
             # Refetch the rewards data
             rewards_data = get_rewards_data(wallet_address)
+
+            # If theres none notify the user and redirect back to supported projects
+            if rewards_data is None:
+                bot.send_message(
+                    message.chat.id, f"❌ No rewards data found for {wallet_address}."
+                )
+                handle_main_menu_command(message)
+                return
+
+            # If the data is of type string then there was an error and we will print the
+            # exception to the user and redirect back to supported projects
+            elif isinstance(rewards_data, str):
+                bot.send_message(message.chat.id, f"❌ {rewards_data}")
+                handle_main_menu_command(message)
+                return
 
             # Update cache with fresh data
             updated_data = {
@@ -190,51 +217,19 @@ def mr_rewards_bot():
             }
 
             # Update cache with the new data
-            user_cache[chat_id] = updated_data
+            try:
+                redis_client.setex(cache_key, 3600, json.dumps(updated_data))
+            except Exception as e:
+                bot.send_message(
+                    message.chat.id, f"❌ Couldn't save wallet address. Please try again later."
+                )
+            handle_main_menu_command(message)
+            return "error"
 
             return updated_data["rewards_data"]
 
         # Data is fresh, return cached rewards data
         return cached_data["rewards_data"]
-
-    def clean_user_cache():
-
-        """
-        Removes stale cache entries that are older than 1 hour and 15 minutes
-        """
-        current_time = datetime.now()
-
-        # Get list of chat_ids to remove (can't modify dict while iterating)
-        chat_ids_to_remove = []
-
-        for chat_id, cached_data in user_cache.items():
-            try:
-                # Parse the timestamp
-                last_updated = datetime.fromisoformat(cached_data["last_updated"])
-
-                # Check if data is older than 1 hour 15 minutes
-                time_diff = current_time - last_updated
-                if time_diff.total_seconds() > 4500:
-                    chat_ids_to_remove.append(chat_id)
-
-            except (KeyError, ValueError) as e:
-                # If there's an issue with the timestamp, consider it stale and remove it
-                print(f"Warning: Invalid cache entry for chat_id {chat_id}: {e}")
-                chat_ids_to_remove.append(chat_id)
-
-        # Remove stale entries
-        removed_count = 0
-        for chat_id in chat_ids_to_remove:
-            del user_cache[chat_id]
-            removed_count += 1
-
-        if removed_count > 0:
-            print(f"🧹 Cache cleanup: Removed {removed_count} stale entries")
-        else:
-            print("🧹 Cache cleanup: No stale entries found")
-
-        return removed_count
-
 
     ##########################################################
     #               Supported Projects Handlers              #
@@ -302,6 +297,8 @@ def mr_rewards_bot():
             # to get the wallet data and add it to the cache
             bot.register_next_step_handler(call.message, set_user_wallet_data)
             return
+        elif rewards_data == "error":
+            return # User has been redirected to main menu already so stop
 
         # Get the users wallet address and rewards amounts for the selected distributor
         wallet_address = rewards_data.get("wallet_address")
@@ -343,6 +340,10 @@ def mr_rewards_bot():
             bot.register_next_step_handler(message, set_user_wallet_data)
             return
 
+         # User has been redirected to main menu already so stop
+        elif rewards_data == "error":
+            return
+
         # Create the display of projects that have issued rewards
         create_wallets_distributors_display(message, rewards_data)
 
@@ -364,6 +365,10 @@ def mr_rewards_bot():
             # Once they response with the wallet address we call the set_user_wallet_data
             # to get the wallet data and add it to the cache
             bot.register_next_step_handler(call.message, set_user_wallet_data)
+            return
+
+        # User has been redirected to main menu already so stop
+        elif rewards_data == "error":
             return
 
         # Create the display of projects that have issued rewards
@@ -391,8 +396,10 @@ def mr_rewards_bot():
         # Check if we have a users configured wallet in the cache
         rewards_data = get_user_wallet_data(chat_id)
 
+        if rewards_data == "error":
+            return
         # If we have a response then there will be a wallet address
-        if rewards_data is not None:
+        elif rewards_data is not None:
             wallet_address = rewards_data.get("wallet_address")
             wallet = f"{wallet_address[:4]}...{wallet_address[-4:]}"
 
@@ -529,7 +536,6 @@ def mr_rewards_bot():
         )
 
      # Start a timer that cleans the users cache every 1 hr and 15 minutes(4500 seconds)
-    timer(clean_user_cache, 4500)
 
     # Begin polling
     bot.infinity_polling()
@@ -548,7 +554,7 @@ def get_supported_projects():
         print(f"Could not get supported projects from server. Please try again later.")
         raise
 
-
+# This needs to handle the 429 errors and return the correct string back so the user knows whats going on
 def get_rewards_data(wallet_address):
     """This calls the API to get the rewards data for a given wallet address"""
     url = f"{os.getenv("API_URL")}/rewards/{wallet_address}"
