@@ -3,6 +3,7 @@ from lib.Controller import Controller
 
 # Global controller instance
 _controller_instance = None
+_limiter_instance = None
 
 # Set the controllers global variable
 def set_controller(controller: Controller):

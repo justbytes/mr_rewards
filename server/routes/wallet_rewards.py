@@ -1,14 +1,16 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import List
 from lib.Controller import Controller
 from .dependency import get_controller
 from .models import  WalletsRewardsResponse
+from limiter import limiter
 
 # Initialize the router
 router = APIRouter()
 
 @router.get("/{wallet_address}", response_model=WalletsRewardsResponse | None)
-async def get_wallets_rewards(wallet_address: str, controller: Controller = Depends(get_controller)):
+@limiter.limit("10/minute")
+async def get_wallets_rewards(request: Request, wallet_address: str, controller: Controller = Depends(get_controller)):
     """Gets the total rewards amounts for a given wallet address"""
     # Validate address
     wallet_address = wallet_address.strip()
