@@ -212,14 +212,14 @@ def mr_rewards_bot():
                     message.chat.id, f"❌ No rewards data found for {wallet_address}."
                 )
                 handle_main_menu_command(message)
-                return
+                return None
 
             # If the data is of type string then there was an error and we will print the
             # exception to the user and redirect back to supported projects
             elif isinstance(rewards_data, str):
                 bot.send_message(message.chat.id, f"❌ {rewards_data}")
                 handle_main_menu_command(message)
-                return
+                return "error"
 
             # Update cache with fresh data
             updated_data = {
@@ -234,14 +234,13 @@ def mr_rewards_bot():
                 bot.send_message(
                     message.chat.id, f"❌ Couldn't save wallet address. Please try again later."
                 )
-            handle_main_menu_command(message)
-            return "error"
+                handle_main_menu_command(message)
+                return "error"
 
             return updated_data["rewards_data"]
 
         # Data is fresh, return cached rewards data
         return cached_data["rewards_data"]
-
     ##########################################################
     #               Supported Projects Handlers              #
     ##########################################################
@@ -449,7 +448,8 @@ def mr_rewards_bot():
         rewards_data = get_user_wallet_data(message)
 
         if rewards_data == "error":
-            return
+            # Return a basic menu even if there's an error
+            pass  # Continue with wallet = None
         # If we have a response then there will be a wallet address
         elif rewards_data is not None:
             wallet_address = rewards_data.get("wallet_address")
