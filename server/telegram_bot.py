@@ -250,9 +250,6 @@ def mr_rewards_bot():
         """Creates and displays the supported projects if the /supported_projects comamand is used"""
 
         # Build the supported projects display
-        markup = create_supported_projects_display()
-
-        # Build the supported projects display
         try:
             markup = create_supported_projects_display()
         except Exception as e:
