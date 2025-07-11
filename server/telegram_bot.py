@@ -32,7 +32,7 @@ def mr_rewards_bot():
 
         # Build the main menu view passing the chat id to check if the user
         # added a wallet already
-        markup, response_text = create_main_menu_display(message.chat.id)
+        markup, response_text = create_main_menu_display(message)
 
         # Display the main menu
         bot.send_message(
@@ -48,7 +48,7 @@ def mr_rewards_bot():
 
         # Build the main menu view passing the chat id to check if the user
         # added a wallet already
-        markup, response_text = create_main_menu_display(call.message.chat.id)
+        markup, response_text = create_main_menu_display(call.message)
 
         # Display the main menu
         bot.edit_message_text(
@@ -159,11 +159,13 @@ def mr_rewards_bot():
         # Return to the main menu
         handle_main_menu_command(message)
 
-    def get_user_wallet_data(chat_id):
+    def get_user_wallet_data(message):
         """
         Get a users wallet with their chat id and updates the cache if the data
         is stale
         """
+
+        chat_id = message.chat.id
 
         # Get the cache data
         try:
@@ -283,7 +285,7 @@ def mr_rewards_bot():
         back_to = parts[2] # Points to where we should navigate the user if they click the "Go Back" button
 
         # Check the cache to see if we have the users wallet already stored
-        rewards_data = get_user_wallet_data(call.message.chat.id)
+        rewards_data = get_user_wallet_data(call.message)
 
         # If users wallet isn't in the cache we will prompt them to add it
         if rewards_data is None:
@@ -325,7 +327,7 @@ def mr_rewards_bot():
         """Displays the distributors that have sent the users configured wallet rewards"""
         print(f"FROM REWARDS COMMAND {message.chat.id}")
         # Check the cache for a the user configured wallet
-        rewards_data = get_user_wallet_data(message.chat.id)
+        rewards_data = get_user_wallet_data(message)
 
         # If there is no data then we don't have the users wallet in the cache so we will prompt them to add one
         if rewards_data is None:
@@ -352,7 +354,7 @@ def mr_rewards_bot():
         """Displays the distributors that have sent the users configured wallet rewards"""
 
         # Check the cache for a the user configured wallet
-        rewards_data = get_user_wallet_data(call.message.chat.id)
+        rewards_data = get_user_wallet_data(call.message)
 
         # If there is no data then we don't have the users wallet in the cache so we will prompt them to add one
         if rewards_data is None:
@@ -385,11 +387,12 @@ def mr_rewards_bot():
     ##########################################################
     #                      Telegram Views                    #
     ##########################################################
-    def create_main_menu_display(chat_id):
+    def create_main_menu_display(message):
         """
         This is the display for the main menu which features two buttons. One to
         to see supported projects the other that shows rewards for a given wallet
         """
+        chat_id = message.chat.id
         markup = types.InlineKeyboardMarkup()
         wallet = None
 
