@@ -5,15 +5,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_historical_transactions_for_distributor(
-    distributor, batch_size=1000
+    distributor, before, batch_size=1000
 ):
     """ Gets all of the transactions for a distributor """
     batch = []
     batch_count = 0
     total_count = 0
     real_count = 0
-    before = None
     last_sig = None
+    newest_sig = None
+    no_more_txs = False
 
     # URL for call to Helius
     url = f"https://api.helius.xyz/v0/addresses/{distributor}/transactions"
@@ -42,20 +43,21 @@ def get_historical_transactions_for_distributor(
             # If no transactions returned, we've reached the end
             if not txs:
                 print("No more transactions!")
+                no_more_txs = True
                 break
 
             # Add transactions to current batch
             batch.extend(process_distributor_transactions(txs))
 
-            if last_sig is None:
-                last_sig = txs[0]["signature"]
+            if newest_sig is None and txs:
+                newest_sig = txs[0]["signature"]
 
             # Set the before parameter to the signature of the last transaction
             before = txs[-1]["signature"]
 
         except Exception as e:
             print(f"Error when fetching distributor transactions from helius: {e}")
-            return None
+            return 404
 
         # Check if batch is full
         if len(batch) >= batch_size:
@@ -66,7 +68,7 @@ def get_historical_transactions_for_distributor(
                 f"Yielding distributor transactions batch {batch_count}. Transaction count: {total_count}"
             )
 
-            yield { "txs": batch, "last_sig": last_sig}
+            yield { "txs": batch, "before": before, "last_sig": newest_sig, "finished": no_more_txs}
 
             # Clear batch for next iteration
             batch = []
@@ -75,8 +77,12 @@ def get_historical_transactions_for_distributor(
     if batch:
         batch_count += 1
         total_count += len(batch)
+
+        # Get the signature of the last transaction in this final batch
+        batch_last_sig = batch[-1]["signature"] if batch else before
+
         print(f"Yielding final batch. Transaction count: {total_count}")
-        yield { "txs": batch, "last_sig": last_sig}
+        yield { "txs": batch, "before": batch_last_sig, "last_sig": newest_sig, "finished": no_more_txs}
 
 
 def get_new_distributor_transactions(
