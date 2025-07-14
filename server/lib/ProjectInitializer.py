@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 from ..db.MongoDB import MongoDB
+from ..db.BackupDB import BackupDB
 from ..utils.helius import get_historical_transactions_for_distributor
 
 load_dotenv()
@@ -12,14 +13,21 @@ class ProjectInitializer:
     def __init__(self, distributor):
         self.distributor = distributor
 
-        # Get connection to db
+        # Get connection to MongoDB
         try:
-            self.db = MongoDB()
+            self.mongo_db = MongoDB()
         except:
             raise Exception("Error getting instance of MongoDB")
 
+
+        # Get connection to BackupDB
+        try:
+            self.backup_db = BackupDB(True, distributor)
+        except:
+            raise Exception("Error getting instance of BackupDB")
+
         # Get known tokens
-        self.known_tokens = self.db.get_known_tokens()
+        self.known_tokens = self.mongo_db.get_known_tokens()
 
         # Create a dictionary for O(1) lookups
         self.known_tokens_dict = {
