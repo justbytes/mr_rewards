@@ -11,11 +11,11 @@ CREATE TABLE IF NOT EXISTS temp_transactions(
 )
 """
 
-temp_txs_last_sig = """
-CREATE TABLE IF NOT EXISTS temp_txs_last_sig(
+temp_txs_last_sigs = """
+CREATE TABLE IF NOT EXISTS temp_txs_last_sigs(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     before TEXT,
-    last_sig TEXTS,
+    last_sig TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 )
 """
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS supported_projects(
 )
 """
 known_tokens = """
-CREATE TABLE IF NOT EXISTS supported_projects(
+CREATE TABLE IF NOT EXISTS known_tokens(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     symbol TEXT,
     name TEXT,
