@@ -2,7 +2,14 @@ import os
 import sqlite3
 import json
 from dotenv import load_dotenv
-from schemas import temp_transactions, temp_txs_last_sigs, transfers, wallets, supported_projects, known_tokens
+from .schemas import (
+    temp_transactions,
+    temp_txs_last_sigs,
+    transfers,
+    wallets,
+    supported_projects,
+    known_tokens,
+)
 
 load_dotenv()
 
@@ -17,7 +24,7 @@ class BackupDB:
     """
 
     def __init__(self, temp, distributor):
-        """ Initialize the BackupDB class by configuring DB's """
+        """Initialize the BackupDB class by configuring DB's"""
         self.temp = temp
 
         # Configure db collections
@@ -25,21 +32,26 @@ class BackupDB:
         self.config_cursor = self.config_connection.cursor()
 
         if self.temp:
-            self.temp_storage_connection = sqlite3.connect(f"backup/temp_storage/{distributor}.db")
+            self.temp_storage_connection = sqlite3.connect(
+                f"backup/temp_storage/{distributor}.db"
+            )
             self.temp_storage_cursor = self.temp_storage_connection.cursor()
         else:
-            self.distributor_connection = sqlite3.connect(f"backup/{distributor}.db")
+            self.distributor_connection = sqlite3.connect(
+                f"backup/transfers/{distributor}.db"
+            )
             self.distributor_cursor = self.distributor_connection.cursor()
 
+        self.create_tables()
 
-    def create_tables(self, temp):
-        """ Creates the tables for the dbs """
+    def create_tables(self):
+        """Creates the tables for the dbs"""
         self.config_cursor.execute(wallets)
         self.config_cursor.execute(supported_projects)
         self.config_cursor.execute(known_tokens)
 
         # Only needed when initializing new projects
-        if temp:
+        if self.temp:
             self.temp_storage_cursor.execute(temp_transactions)
             self.temp_storage_cursor.execute(temp_txs_last_sigs)
             self.temp_storage_cursor.execute(transfers)
@@ -52,46 +64,56 @@ class BackupDB:
     ##########################################################
     #               Project Initializer Functions            #
     ##########################################################
-    def insert_temp_txs_batch(self, batch, batch_size=1000):
+    def insert_temp_txs_batch(self, batch, batch_size=5000):
         """
-        Insert a batch of temporary transactions into the temp_transactions table
+        Insert a batch of temporary transactions into the temp_transactions table.
+        Optimized for performance with larger batch sizes and better SQLite settings.
         """
+        if not batch:
+            return True
+
         try:
-            # Process in batches to avoid memory issues with large datasets
+            # Set SQLite performance optimizations
+            self.temp_storage_cursor.execute("PRAGMA journal_mode = MEMORY")
+            self.temp_storage_cursor.execute("PRAGMA cache_size = 10000")
+
+            # Begin explicit transaction
+            self.temp_storage_cursor.execute("BEGIN TRANSACTION")
+
+            # Process in larger batches
             for i in range(0, len(batch), batch_size):
-                batch_chunk = batch[i:i + batch_size]
+                batch_chunk = batch[i : i + batch_size]
 
-                # Prepare data for insertion
-                data_to_insert = []
-                for tx in batch_chunk:
-
-                    # Serialize list data
-                    token_transfers_json = json.dumps(tx.get('token_transfers', []))
-                    native_transfers_json = json.dumps(tx.get('native_transfers', []))
-
-                    data_to_insert.append((
-                        tx.get('fee_payer', ''),
-                        tx.get('signature', ''),
-                        tx.get('slot', 0),
-                        tx.get('timestamp', 0),
-                        token_transfers_json,
-                        native_transfers_json
-                    ))
+                # Pre-allocate list and use list comprehension for speed
+                data_to_insert = [
+                    (
+                        tx.get("fee_payer", ""),
+                        tx.get("signature", ""),
+                        tx.get("slot", 0),
+                        tx.get("timestamp", 0),
+                        json.dumps(tx.get("token_transfers", [])),
+                        json.dumps(tx.get("native_transfers", [])),
+                    )
+                    for tx in batch_chunk
+                ]
 
                 # Insert batch
                 self.temp_storage_cursor.executemany(
                     """INSERT INTO temp_transactions
                        (fee_payer, signature, slot, timestamp, token_transfers, native_transfers)
                        VALUES (?, ?, ?, ?, ?, ?)""",
-                    data_to_insert
+                    data_to_insert,
                 )
 
-            self.temp_storage_connection.commit()
+            # Commit the entire transaction at once
+            self.temp_storage_cursor.execute("COMMIT")
             print(f"Successfully inserted {len(batch)} temporary transactions")
+            return True
 
         except Exception as e:
             print(f"Error inserting temp transactions batch: {e}")
-            self.temp_storage_connection.rollback()
+            self.temp_storage_cursor.execute("ROLLBACK")
+            return False
 
     def update_temp_txs_before_sig(self, new_sig):
         """
@@ -99,23 +121,22 @@ class BackupDB:
         """
         try:
             self.temp_storage_cursor.execute(
-                """UPDATE temp_txs_last_sigs SET before = ? WHERE id = 1""",
-                (new_sig,)
+                """UPDATE temp_txs_last_sigs SET before = ? WHERE id = 1""", (new_sig,)
             )
 
             # If no rows were updated, insert a new record
             if self.temp_storage_cursor.rowcount == 0:
                 self.temp_storage_cursor.execute(
                     """INSERT INTO temp_txs_last_sigs (before, last_sig) VALUES (?, '')""",
-                    (new_sig,)
+                    (new_sig,),
                 )
 
             self.temp_storage_connection.commit()
-            print(f"Updated temp_txs before signature to: {new_sig}")
-
+            return True
         except Exception as e:
             print(f"Error updating temp_txs before signature: {e}")
             self.temp_storage_connection.rollback()
+            return False
 
     def update_temp_txs_last_sig(self, new_sig):
         """
@@ -124,22 +145,46 @@ class BackupDB:
         try:
             self.temp_storage_cursor.execute(
                 """UPDATE temp_txs_last_sigs SET last_sig = ? WHERE id = 1""",
-                (new_sig,)
+                (new_sig,),
             )
 
             # If no rows were updated, insert a new record
             if self.temp_storage_cursor.rowcount == 0:
                 self.temp_storage_cursor.execute(
                     """INSERT INTO temp_txs_last_sigs (before, last_sig) VALUES ('', ?)""",
-                    (new_sig,)
+                    (new_sig,),
                 )
 
             self.temp_storage_connection.commit()
-            print(f"Updated temp_txs last signature to: {new_sig}")
-
+            return True
         except Exception as e:
             print(f"Error updating temp_txs last signature: {e}")
             self.temp_storage_connection.rollback()
+            return False
+
+    def update_temp_offset(self, new_offset):
+        """
+        Update the 'last_sig' signature in temp_txs_last_sigs table
+        """
+        try:
+            self.temp_storage_cursor.execute(
+                """UPDATE temp_txs_last_sigs SET offset = ? WHERE id = 1""",
+                (new_offset,),
+            )
+
+            # If no rows were updated, insert a new record
+            if self.temp_storage_cursor.rowcount == 0:
+                self.temp_storage_cursor.execute(
+                    """INSERT INTO temp_txs_last_sigs (before, last_sig, offset) VALUES ('', ?)""",
+                    (new_offset,),
+                )
+
+            self.temp_storage_connection.commit()
+            return True
+        except Exception as e:
+            print(f"Error updating temp_txs last signature: {e}")
+            self.temp_storage_connection.rollback()
+            return False
 
     def get_temp_txs_last_sigs(self):
         """
@@ -147,56 +192,59 @@ class BackupDB:
         """
         try:
             self.temp_storage_cursor.execute(
-                """SELECT before, last_sig FROM temp_txs_last_sigs ORDER BY id DESC LIMIT 1"""
+                """SELECT before, last_sig, offset FROM temp_txs_last_sigs ORDER BY id DESC LIMIT 1"""
             )
             result = self.temp_storage_cursor.fetchone()
 
             if result:
-                return {
-                    'before': result[0],
-                    'last_sig': result[1]
-                }
-            return None
+                return result[0], result[1], result[2]
+            return None, None, None
 
         except Exception as e:
             print(f"Error getting temp_txs last signatures: {e}")
-            return None
+            return None, None, None
 
-    def get_temp_transactions(self, limit=None):
+    def get_temp_transactions(self, batch_size=1000, offset=0):
         """
-        Retrieve temporary transactions from the temp_transactions table
+        Generator that yields batches with resume capability.
+        Useful if you need to resume processing from a specific point.
         """
         try:
-            if limit:
-                query = """SELECT fee_payer, signature, slot, timestamp, token_transfers, native_transfers
-                          FROM temp_transactions ORDER BY id DESC LIMIT ?"""
-                self.temp_storage_cursor.execute(query, (limit,))
-            else:
-                query = """SELECT fee_payer, signature, slot, timestamp, token_transfers, native_transfers
-                          FROM temp_transactions ORDER BY id DESC"""
-                self.temp_storage_cursor.execute(query)
+            current_offset = offset
+            query = """SELECT fee_payer, signature, slot, timestamp, token_transfers, native_transfers
+                        FROM temp_transactions
+                        ORDER BY id ASC
+                        LIMIT ? OFFSET ?"""
 
-            results = self.temp_storage_cursor.fetchall()
+            while True:
+                self.temp_storage_cursor.execute(query, (batch_size, current_offset))
+                results = self.temp_storage_cursor.fetchall()
 
-            # Parse JSON strings back to Python objects
-            transactions = []
-            for row in results:
-                tx = {
-                    'fee_payer': row[0],
-                    'signature': row[1],
-                    'slot': row[2],
-                    'timestamp': row[3],
-                    'token_transfers': json.loads(row[4]) if row[4] else [],
-                    'native_transfers': json.loads(row[5]) if row[5] else []
-                }
-                transactions.append(tx)
+                if not results:
+                    # No more data to process - successful completion
+                    break  # Exit the while loop cleanly
 
-            return transactions
+                # Parse JSON strings back to Python objects
+                transactions = []
+                for row in results:
+                    tx = {
+                        "fee_payer": row[0],
+                        "signature": row[1],
+                        "slot": row[2],
+                        "timestamp": row[3],
+                        "token_transfers": json.loads(row[4]) if row[4] else [],
+                        "native_transfers": json.loads(row[5]) if row[5] else [],
+                    }
+                    transactions.append(tx)
+
+                # Yield the batch and current offset
+                yield transactions, current_offset
+
+                current_offset += batch_size
 
         except Exception as e:
-            print(f"Error retrieving temp transactions: {e}")
-            return []
-
+            print(f"Error retrieving temp transactions batch: {e}")
+            return
     def get_temp_transactions_count(self):
         """
         Get the total count of temporary transactions in the temp_transactions table
@@ -210,52 +258,79 @@ class BackupDB:
             print(f"Error getting temp transactions count: {e}")
             return 0
 
+    def get_temp_transfers_count(self):
+        """
+        Get the total count of temporary transactions in the temp_transactions table
+        """
+        try:
+            self.temp_storage_cursor.execute("SELECT COUNT(*) FROM transfers")
+            result = self.temp_storage_cursor.fetchone()
+            return result[0] if result else 0
+
+        except Exception as e:
+            print(f"Error getting temp transactions count: {e}")
+            return 0
+
     def migrate_to_production(self):
+        """
+        Once all of the data has been collected, processed, and mongoDB has wallets updated we will
+        drop the temp_transactions and temp_txs_last_sigs tables and move the DB to the backup/transfers dir
+        """
         pass
+
     ##########################################################
     #               Production Backup Function               #
     ##########################################################
     def insert_transfer_batch(self, batch, batch_size=1000):
         """
-        Insert a batch of transfers into the transfers table.
-
-        Args:
-            batch (list): List of transfer dictionaries with keys:
-                         signature, slot, timestamp, amount, token, wallet_address, distributor
-            batch_size (int): Size of each batch for insertion
+        Insert a batch of transfers into the transfers table
         """
+
+        # Get the correct connection and cursor
+        if self.temp:
+            connection = self.temp_storage_connection
+            cursor = self.temp_storage_cursor
+        else:
+            connection = self.distributor_connection
+            cursor = self.distributor_cursor
+
         try:
             # Process in batches to avoid memory issues with large datasets
             for i in range(0, len(batch), batch_size):
-                batch_chunk = batch[i:i + batch_size]
+                batch_chunk = batch[i : i + batch_size]
 
                 # Prepare data for insertion
                 data_to_insert = []
                 for transfer in batch_chunk:
-                    data_to_insert.append((
-                        transfer.get('signature', ''),
-                        transfer.get('slot', 0),
-                        transfer.get('timestamp', 0),
-                        transfer.get('amount', 0.0),
-                        transfer.get('token', ''),
-                        transfer.get('wallet_address', ''),
-                        transfer.get('distributor', '')
-                    ))
+                    data_to_insert.append(
+                        (
+                            transfer.get("signature", ""),
+                            transfer.get("slot", 0),
+                            transfer.get("timestamp", 0),
+                            transfer.get("amount", 0.0),
+                            transfer.get("token", ""),
+                            transfer.get("wallet_address", ""),
+                            transfer.get("distributor", ""),
+                        )
+                    )
 
                 # Insert batch
-                self.distributor_cursor.executemany(
+                cursor.executemany(
                     """INSERT INTO transfers
                        (signature, slot, timestamp, amount, token, wallet_address, distributor)
                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    data_to_insert
+                    data_to_insert,
                 )
 
-            self.distributor_connection.commit()
+            connection.commit()
             print(f"Successfully inserted {len(batch)} transfers")
+            return True
 
         except Exception as e:
             print(f"Error inserting transfer batch: {e}")
             self.distributor_connection.rollback()
+            return False
+
 
     def insert_or_update_wallets(self, wallets_data):
         """
@@ -267,13 +342,13 @@ class BackupDB:
         """
         try:
             for wallet in wallets_data:
-                wallet_address = wallet.get('wallet_address', '')
-                distributors = wallet.get('distributors', '')
+                wallet_address = wallet.get("wallet_address", "")
+                distributors = wallet.get("distributors", "")
 
                 # Check if wallet already exists
                 self.config_cursor.execute(
                     """SELECT id FROM wallets WHERE wallet_address = ?""",
-                    (wallet_address,)
+                    (wallet_address,),
                 )
                 existing = self.config_cursor.fetchone()
 
@@ -281,13 +356,13 @@ class BackupDB:
                     # Update existing wallet
                     self.config_cursor.execute(
                         """UPDATE wallets SET distributors = ? WHERE wallet_address = ?""",
-                        (distributors, wallet_address)
+                        (distributors, wallet_address),
                     )
                 else:
                     # Insert new wallet
                     self.config_cursor.execute(
                         """INSERT INTO wallets (wallet_address, distributors) VALUES (?, ?)""",
-                        (wallet_address, distributors)
+                        (wallet_address, distributors),
                     )
 
             self.config_connection.commit()
@@ -308,14 +383,16 @@ class BackupDB:
             self.config_cursor.execute(
                 """INSERT INTO known_tokens (symbol, name, mint, decimals) VALUES (?, ?, ?, ?)""",
                 (
-                    known_token.get('symbol', ''),
-                    known_token.get('name', ''),
-                    known_token.get('mint', ''),
-                    known_token.get('decimals', '')
-                )
+                    known_token.get("symbol", ""),
+                    known_token.get("name", ""),
+                    known_token.get("mint", ""),
+                    known_token.get("decimals", ""),
+                ),
             )
             self.config_connection.commit()
-            print(f"Successfully inserted known token: {known_token.get('symbol', 'Unknown')}")
+            print(
+                f"Successfully inserted known token: {known_token.get('symbol', 'Unknown')}"
+            )
 
         except Exception as e:
             print(f"Error inserting known token: {e}")
@@ -333,15 +410,17 @@ class BackupDB:
                 """INSERT INTO supported_projects (name, distributor, token_mint, dev_wallet, last_sig)
                    VALUES (?, ?, ?, ?, ?)""",
                 (
-                    supported_project.get('name', ''),
-                    supported_project.get('distributor', ''),
-                    supported_project.get('token_mint', ''),
-                    supported_project.get('dev_wallet', ''),
-                    supported_project.get('last_sig', '')
-                )
+                    supported_project.get("name", ""),
+                    supported_project.get("distributor", ""),
+                    supported_project.get("token_mint", ""),
+                    supported_project.get("dev_wallet", ""),
+                    supported_project.get("last_sig", ""),
+                ),
             )
             self.config_connection.commit()
-            print(f"Successfully inserted supported project: {supported_project.get('name', 'Unknown')}")
+            print(
+                f"Successfully inserted supported project: {supported_project.get('name', 'Unknown')}"
+            )
 
         except Exception as e:
             print(f"Error inserting supported project: {e}")
@@ -368,23 +447,36 @@ class BackupDB:
 
 if __name__ == "__main__":
     b = BackupDB(True, "HHBkrmzwY7TbDG3G5C4D52LPPd8JEs5oiKWHaPxksqvd")
-    #b.create_tables(True)
 
-    # Example usage:
-    # Insert some temp transactions
-    # temp_txs = [
-    #     {
-    #         'fee_payer': 'wallet1',
-    #         'signature': 'sig1',
-    #         'slot': 12345,
-    #         'timestamp': 1640995200,
-    #         'token_transfers': [{"hello": "hello"}],
-    #         'native_transfers': [{"hell1o": "hell1o"}]
-    #     }
-    # ]
-    # b.insert_temp_txs_batch(temp_txs)
+    print(f"Total temp transactions: {b.get_temp_transfers_count()}")
 
-    print(b.get_temp_transactions_count())
+    # offset = 0
+    # batch_count = 0
+    # total_processed = 0
 
-    # Close connections when done
+    # # Use the generator properly
+    # for batch, current_offset in b.get_temp_transactions(batch_size=1000, offset=offset):
+    #     # Safety check to ensure batch is a list
+    #     if not isinstance(batch, list):
+    #         print(f"Unexpected batch type: {type(batch)}, value: {batch}")
+    #         break
+
+    #     batch_count += 1
+    #     total_processed += len(batch)
+
+    #     print(f"Batch {batch_count}: {len(batch)} transactions at offset {current_offset}")
+
+    #     # Process your batch here - example: print first transaction in each batch
+    #     if batch:
+    #         first_tx = batch[0]
+    #         print(f"  First tx signature: {first_tx['signature']}")
+    #         print(f"  First tx slot: {first_tx['slot']}")
+    #         print(f"  First tx timestamp: {first_tx['timestamp']}")
+    #         print(f"  Token transfers: {len(first_tx['token_transfers'])}")
+    #         print(f"  Native transfers: {len(first_tx['native_transfers'])}")
+
+    #     # Update offset for next iteration (though the generator handles this internally)
+    #     offset = current_offset + len(batch)
+
+    # print(f"\nFinished processing {total_processed} transactions in {batch_count} batches")
     b.close_connections()
