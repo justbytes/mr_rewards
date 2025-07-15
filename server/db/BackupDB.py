@@ -2,7 +2,7 @@ import os
 import sqlite3
 import json
 from dotenv import load_dotenv
-from .schemas import (
+from schemas import (
     temp_transactions,
     temp_txs_last_sigs,
     transfers,
@@ -107,7 +107,7 @@ class BackupDB:
 
             # Commit the entire transaction at once
             self.temp_storage_cursor.execute("COMMIT")
-            print(f"Successfully inserted {len(batch)} temporary transactions")
+            # print(f"Successfully inserted {len(batch)} temporary transactions")
             return True
 
         except Exception as e:
@@ -323,7 +323,7 @@ class BackupDB:
                 )
 
             connection.commit()
-            print(f"Successfully inserted {len(batch)} transfers")
+            # print(f"Successfully inserted {len(batch)} transfers")
             return True
 
         except Exception as e:
@@ -446,9 +446,9 @@ class BackupDB:
 
 
 if __name__ == "__main__":
-    b = BackupDB(True, "HHBkrmzwY7TbDG3G5C4D52LPPd8JEs5oiKWHaPxksqvd")
+    b = BackupDB(True, "ChGA1Wbh9WN8MDiQ4ggA5PzBspS2Z6QheyaxdVo3XdW6")
 
-    print(f"Total temp transactions: {b.get_temp_transfers_count()}")
+    print(f"Total temp transactions: {b.get_temp_txs_last_sigs()}")
 
     # offset = 0
     # batch_count = 0
