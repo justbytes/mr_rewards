@@ -30,7 +30,6 @@ class Controller:
 
         print(f"Loaded {len(self.known_tokens)} known tokens")
 
-
     def begin_polling(self):
         """
         Runs the update distributors function every five minutes(300 seconds) using the timer utility to check for new transactions
@@ -38,7 +37,7 @@ class Controller:
         timer(self.update_distributors_transactions, 300)
 
     def update_distributors_transactions(self):
-        """ This will loop through each supported project and get any new transfers """
+        """This will loop through each supported project and get any new transfers"""
         projects = self.get_supported_projects_from_db()
 
         for project in projects:
@@ -58,21 +57,31 @@ class Controller:
         updated_sig = False
 
         # Get the all of the transactions starting from the last signature by calling the distributor_transfer_generator
-        for transaction_batch in get_new_distributor_transactions(distributor, last_sig):
+        for transaction_batch in get_new_distributor_transactions(
+            distributor, last_sig
+        ):
 
             # Save the new sig if we haven't already
             if not updated_sig:
                 # Update the projects last signature
-                self.db.update_newest_tx_signature_for_distributor(distributor, transaction_batch.get('last_sig'))
-                updated_sig = True # Set to true so we don't keep updating the same value
+                self.db.update_newest_tx_signature_for_distributor(
+                    distributor, transaction_batch.get("last_sig")
+                )
+                updated_sig = (
+                    True  # Set to true so we don't keep updating the same value
+                )
 
             # Extract the transfers from the transactions and insert them into the db
-            for transfer_batch in self.extract_transfers_from_distributor_transactions(transaction_batch.get("txs"), distributor):
+            for transfer_batch in self.extract_transfers_from_distributor_transactions(
+                transaction_batch.get("txs"), distributor
+            ):
 
                 # Update wallets with new rewards amounts
                 self.aggregate_rewards(transfer_batch)
 
-    def extract_transfers_from_distributor_transactions(self, transactions, distributor, batch_size=1000):
+    def extract_transfers_from_distributor_transactions(
+        self, transactions, distributor, batch_size=1000
+    ):
         """
         Extract transfers and insert into DB, yielding only successfully inserted transfers
         """
@@ -88,11 +97,15 @@ class Controller:
             processed_batch = process_distributor_transfers(self, batch, distributor)
 
             # Insert into database and get what was actually inserted
-            inserted_docs, inserted_count = self.db.insert_transfers_batch(processed_batch)
+            inserted_docs, inserted_count = self.db.insert_transfers_batch(
+                processed_batch
+            )
             total_inserted += inserted_count
             total_docs += len(processed_batch)
 
-            print(f"Transfer Batch {batch_num}/{total_batches}: {inserted_count} inserted, {len(processed_batch) - inserted_count} duplicates skipped. Total: {total_inserted}/{total_docs}")
+            print(
+                f"Transfer Batch {batch_num}/{total_batches}: {inserted_count} inserted, {len(processed_batch) - inserted_count} duplicates skipped. Total: {total_inserted}/{total_docs}"
+            )
 
             # Only yield the transfers that were actually inserted
             yield inserted_docs
@@ -110,7 +123,6 @@ class Controller:
         for i in range(0, len(transfers), batch_size):
             batch = transfers[i : i + batch_size]
             batch_num = (i // batch_size) + 1
-
 
             aggregated_batch = aggregate_transfers(batch)
             updated = self.db.insert_wallet_rewards(aggregated_batch)
@@ -180,8 +192,12 @@ class Controller:
     def get_known_tokens_from_db(self):
         return self.db.get_known_tokens()
 
-    def get_transfers_with_wallet_address_and_distributor_from_db(self, wallet_address, distributor):
-        return self.db.get_transfers_with_wallet_address_and_distributor(wallet_address, distributor)
+    def get_transfers_with_wallet_address_and_distributor_from_db(
+        self, wallet_address, distributor
+    ):
+        return self.db.get_transfers_with_wallet_address_and_distributor(
+            wallet_address, distributor
+        )
 
     def get_rewards_with_wallet_address_from_db(self, wallet_address):
         return self.db.get_wallet_rewards(wallet_address)

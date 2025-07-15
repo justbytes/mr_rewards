@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS temp_txs_last_sigs(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     before TEXT,
     last_sig TEXT,
+    offset INTEGER,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 )
 """
