@@ -55,8 +55,8 @@ def get_historical_transactions_for_distributor(
             # Set the before parameter to the signature of the last transaction
             before = txs[-1]["signature"]
 
-        except:
-            print(f"Error when fetching distributor transactions from helius")
+        except Exception as e:
+            print(f"Error when fetching distributor transactions from helius {e}")
             yield 404
 
         # Check if batch is full
@@ -155,9 +155,9 @@ def get_new_distributor_transactions(
             if found_cutoff:
                 break
 
-        except Exception as e:
-            print(f"Error when fetching distributor transactions from helius: {e}")
-            return  # Changed from 'return None' to just 'return' since this is a generator
+        except:
+            print(f"Error when fetching distributor transactions from helius")
+            return 
 
         # Check if batch is full
         if len(batch) >= batch_size:

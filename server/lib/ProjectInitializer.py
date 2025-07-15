@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 from ..db.MongoDB import MongoDB
@@ -81,7 +82,7 @@ class ProjectInitializer:
             if txs_batch == 404:
                 print(f"Error occurred, incrementing error count. Current count: {error_count + 1}")
                 error_count += 1
-
+                time.sleep(10)
                 # Call the function again starting at the last saved point
                 return self.get_initial_txs(finished_count, error_count, batch_size)
 
@@ -92,7 +93,7 @@ class ProjectInitializer:
             if txs_batch.get("finished"):
                 finished_count += 1
                 print(f"Received 'finished' signal. Count: {finished_count}")
-
+                time.sleep(10)
                 # Call the function again starting at the last saved point
                 return self.get_initial_txs(finished_count, error_count, batch_size)
 
@@ -107,6 +108,7 @@ class ProjectInitializer:
                 # False means data didn't get saved and we should retry and increment the error counter
                 if success is False:
                     error_count += 1
+                    time.sleep(10)
                     return self.get_initial_txs(finished_count, error_count, batch_size)
 
                 # Save the new sig if we haven't already
@@ -121,6 +123,12 @@ class ProjectInitializer:
                 # If we reach this point we need to reset the error counter because
                 # we only want concurrent counts and if we get data it resets
                 error_count = 0
+        
+        # Make sure we check if the finished count was hit
+        if finished_count < 5:
+            finished_count += 1 
+            time.sleep(10)
+            return self.get_initial_txs(finished_count, error_count, batch_size)
 
     def process_initial_txs(self, error_count=0, batch_size=1000):
         """
@@ -190,8 +198,6 @@ class ProjectInitializer:
             else:
                 print("Maximum errors reached. Stopping processing.")
                 return False
-
-
 
     def get_and_add_token_metadata(self, mint_address):
         """

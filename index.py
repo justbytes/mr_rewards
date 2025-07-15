@@ -1,7 +1,7 @@
 from server.lib.ProjectInitializer import ProjectInitializer
 
 def main():
-    distributor = "HHBkrmzwY7TbDG3G5C4D52LPPd8JEs5oiKWHaPxksqvd"
+    distributor = "ChGA1Wbh9WN8MDiQ4ggA5PzBspS2Z6QheyaxdVo3XdW6"
     x = ProjectInitializer(distributor)
 
     success = x.get_initial_txs()
