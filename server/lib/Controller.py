@@ -5,11 +5,11 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 from db.MongoDB import MongoDB
+from db.SQLiteDB import SQLiteDB
 from utils.utils import process_distributor_transfers, aggregate_transfers, timer
 from utils.helius import get_token_metadata, get_new_distributor_transactions
 
 load_dotenv()
-
 
 class Controller:
 
@@ -85,7 +85,6 @@ class Controller:
         """
         Extract transfers and insert into DB, yielding only successfully inserted transfers
         """
-        total_inserted = 0
         total_docs = 0
         total_batches = (len(transactions) + batch_size - 1) // batch_size
 
@@ -97,14 +96,14 @@ class Controller:
             processed_batch = process_distributor_transfers(self, batch, distributor)
 
             # Insert into database and get what was actually inserted
-            inserted_docs, inserted_count = self.db.insert_transfers_batch(
+            success = self.sqlite_db.insert_temp_transfers_batch(
                 processed_batch
             )
-            total_inserted += inserted_count
+
             total_docs += len(processed_batch)
 
             print(
-                f"Transfer Batch {batch_num}/{total_batches}: {inserted_count} inserted, {len(processed_batch) - inserted_count} duplicates skipped. Total: {total_inserted}/{total_docs}"
+                f"Transfer Batch {batch_num}/{total_batches}. Total Docs: {total_docs}"
             )
 
             # Only yield the transfers that were actually inserted
@@ -175,16 +174,17 @@ class Controller:
     #                      MongoDB Getters                   #
     ##########################################################
     def get_db_instance(self):
-        """Get an instance of the DB"""
+        """ Get an instance of the MongoDB and SQLiteDB """
         try:
-            db = MongoDB()
-
-            if db is None:
-                raise Exception(f"There was an error when trying to initialize DB: {e}")
-
-            return db
+            mongo = MongoDB()
         except Exception as e:
-            raise Exception(f"There was an error when trying to initialize DB: {e}")
+            raise Exception(f"There was an error when trying to initialize MongoDB")
+
+        try:
+            sqlite = SQLiteDB()
+        except Exception as e:
+            raise Exception(f"There was an error when trying to initialize SQLiteDB")
+        return mongo, sqlite
 
     def get_supported_projects_from_db(self):
         return self.db.get_supported_projects()

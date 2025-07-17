@@ -2,59 +2,56 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
-from MongoDB import MongoDB
+from db.MongoDB import MongoDB
+from db.SQLiteDB import SQLiteDB
 from datetime import datetime
+
 load_dotenv()
 
-def get_db_instance():
-    """""
-    Creates an instance of the DB
-    """""
-    try:
-        db = MongoDB()
-        return db
-    except Exception as e:
-        print(f"There was an error when trying to initialize DB: {e}")
-        return None
+class BackerUpper:
+    def __init__(self):
+        self.mongo_db, self.sqlite_db = self.get_db_instances()
 
-def backup_supported_projects():
-    """
-    Backup for the supported projects collection from MongoDB
-    """
+    def get_db_instances(self):
+        """""
+        Creates an instance of the DB
+        """""
+        try:
+            mongo = MongoDB()
+        except Exception as e:
+            print(f"There was an error when trying to initialize DB: {e}")
+            raise
 
-    # Setup the file path
-    data_dir = Path(os.getenv('PROJECTS_FILE_PATH'))
-    projects_file = data_dir / "supported_projects.json"
+        try:
+            sqlite = SQLiteDB()
+        except Exception as e:
+            print(f"There was an error when trying to initialize DB: {e}")
+            raise
 
-    # Get DB connection
-    db = get_db_instance()
+        return mongo, sqlite
 
-    # Make sure we have an instance of MongoDB
-    if db is None:
-        print("Could not establish database connection")
-        return
+    # TODO A function that gets all of the transfers from the config_db and then inserts them to the applicable backup db
 
-    try:
-        # Get the supported projects from DB
-        projects = db.get_supported_projects()
+    def backup_supported_projects(self):
+        """
+        Backup for the supported projects collection from MongoDB
+        """
+        try:
+            # Get the supported projects from mongoDB
+            projects = self.mongo_db.get_supported_projects()
 
-        # Create backup data with timestamp
-        backup_data = {
-            "last_updated": datetime.now().isoformat(),
-            "project_count": len(projects),
-            "projects": projects
-        }
+            if projects is None:
+                raise Exception("There was an error trying to get supported projects from mongodb when backing up supported projects.")
 
-        # Write to JSON file overwriting the file each time
-        with open(projects_file, 'w') as f:
-            json.dump(backup_data, f, indent=2, default=str)
+            for project in projects:
+                self.sqlite_db.insert_supported_project(project)
 
-        print(f"Successfully backed up {len(projects)} projects to {projects_file}")
-        return
+            print(f"Successfully backed up {len(projects)} projects to {projects_file}")
+            return
 
-    except Exception as e:
-        print(f"Could not backup projects to file: {e}")
-        return
+        except Exception as e:
+            print(f"Could not backup projects to file: {e}")
+            return
 
 def backup_known_tokens():
     """
