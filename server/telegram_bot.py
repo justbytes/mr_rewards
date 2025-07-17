@@ -592,7 +592,6 @@ def mr_rewards_bot():
     # Begin polling
     bot.infinity_polling()
 
-
 ##########################################################
 #                        API Calls                       #
 ##########################################################
@@ -618,7 +617,6 @@ def get_rewards_data(wallet_address):
             f"Could not get rewards data for wallet address from server. Please try again later."
         )
         return "Could not get rewards data for wallet address from server. Please try again later."
-
 
 def get_distributor_name_by_address(distributor_address, projects):
     """Gets the distributor name for a given distributor address by searching through supported projects"""

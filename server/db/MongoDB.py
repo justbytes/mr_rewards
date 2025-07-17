@@ -20,17 +20,6 @@ class MongoDB:
         self._client = MongoClient(os.getenv("MONGO_URL"), server_api=ServerApi("1"))
         self._db = self._client.rewards_db
 
-    def test_connection(self):
-        """
-        Send a ping to the client and return true if it was successful
-        """
-        try:
-            self._client.admin.command("ping")
-            return True
-        except Exception as e:
-            print(e)
-            return False
-
     def insert_supported_project(self, project):
         """
         Inserts a project into the DB
@@ -195,21 +184,6 @@ class MongoDB:
 
         return actually_inserted_docs, total_inserted
 
-    def get_all_wallet_addresses_from_transfers(self):
-        """
-        Get list of all unique wallet addresses that have received transfers
-        """
-        try:
-            collection = self._db.transfers
-
-            # Get distinct wallet addresses
-            wallets = collection.distinct("wallet_address")
-            return wallets
-
-        except Exception as e:
-            print(f"Error getting all wallets")
-            return None
-
     def get_all_rewards_wallets(self):
         """
         Get all wallet documents from the wallets collection
@@ -225,7 +199,7 @@ class MongoDB:
             print(f"Error getting all wallets: {e}")
             return None
 
-    def insert_wallet_rewards(self, wallets, batch_size=1000):
+    def insert_wallet_rewards(self, wallets, batch_size=5000):
         """
         Bulk update wallet balances with multiple distributors per wallet
         """
@@ -270,7 +244,7 @@ class MongoDB:
                     result = collection.bulk_write(bulk_ops, ordered=False)
                     total_updated += result.modified_count + result.upserted_count
                 except Exception as e:
-                    print(f"Error in batch {batch_num}")
+                    print(f"Error inserting wallet rewards into db {batch_num}")
 
         return total_updated
 
@@ -308,23 +282,6 @@ class MongoDB:
 
         except Exception as e:
             print(f"Error getting wallet transfers with wallet address and distributor")
-            return None
-
-    def get_wallets_distributors(self, wallet_address):
-        """
-        Get list of all distributors that have sent transfers to a specific wallet
-        """
-        try:
-            collection = self._db.transfers
-
-            # Get distinct distributors for this wallet
-            distributors = collection.distinct(
-                "distributor", {"wallet_address": wallet_address}
-            )
-            return distributors
-
-        except Exception as e:
-            print(f"Error getting distributors for wallet")
             return None
 
     def get_all_transfers_for_distributor(self, distributor):
