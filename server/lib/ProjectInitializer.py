@@ -11,6 +11,10 @@ from ..utils.utils import process_distributor_transfers, aggregate_transfers
 load_dotenv()
 
 class ProjectInitializer:
+    """
+    This class contains functions to initialize new projects by getting all of the transfer transactions
+    and then processes them and saves them to their applicable storage locations
+    """
 
     def __init__(self, project):
         self.project = project
@@ -34,6 +38,43 @@ class ProjectInitializer:
         # Holds the offset value in case the funtion is get txs/transfers function is called recusivly
         self.txs_offset = 0
         self.transfers_offset = 0
+
+    def initalize_new_project(self):
+        """
+        This is used to get all of the data for a new project. It runs through
+        the entire process starting with getting all of the transfer transactions for
+        a distributor. Then it processes those transactions removing unnessesary fields
+        and combines the native and token transfers and then saves them to the transfers table.
+        From there we remove any duplicates, create indexes for the db, and drop the temp tables, and inserts
+        the project into the supported projects collection/db. After that the transfers are processed
+        by the aggregator function which adds all of the amounts for each wallet and inserts the wallets rewards to MongoDB
+        """
+
+        # Get all of the projects transfer transactions
+        # This can take hours depending on how long
+        success = self.get_initial_txs()
+        if success is False:
+            return
+
+        # Processes the transactions removing unnessesary fields and creates an object
+        # for each transfer and saves it to the transfers table
+        success = self.process_initial_txs()
+        if success is False:
+            return
+
+        # Remove duplicate transfers, create indexes, drop temp tables,
+        # and insert project into supported projects collection/db
+        success = self.insert_and_clean_project()
+        if success is False:
+            return
+
+        # Aggregates all of the rewards for each wallet in the transfers db and
+        # inserts them to the MongoDB
+        success = self.aggregate_rewards_from_transfers()
+        if success is False:
+            return
+
+        print("New project successfully initialized")
 
     ##########################################################
     #            Functions For Getting Initial Data          #

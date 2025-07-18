@@ -4,7 +4,6 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
 from slowapi import _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from routes import system_config, wallet_rewards
@@ -14,7 +13,6 @@ from limiter import limiter
 from routes.dependency import set_controller, remove_controller
 from dotenv import load_dotenv
 load_dotenv()
-
 
 # Initialize the connection to the MongoDB and asign it the global variable
 def initialize_program():
@@ -46,7 +44,7 @@ async def lifespan(app: FastAPI):
 # Initialize the app
 app = FastAPI(
     title="Mr. Rewards | Solana Rewards Token Tracker",
-    description="API to retrieve aggregated rewards received from distribution wallets",
+    description="API to retrieve aggregated rewards received from rewards token projects",
     version="1.0.0",
     lifespan=lifespan
 )

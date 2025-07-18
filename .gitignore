@@ -1,8 +1,7 @@
 .env
 Pipfile.lock
 __pycache__/
-data/*
 backup/
-old_code/
 backup_01/
+old_code/
 .DS_Store/
