@@ -241,6 +241,7 @@ def mr_rewards_bot():
 
         # Data is fresh, return cached rewards data
         return cached_data["rewards_data"]
+
     ##########################################################
     #               Supported Projects Handlers              #
     ##########################################################
@@ -625,7 +626,6 @@ def get_distributor_name_by_address(distributor_address, projects):
             return project.get("name")
 
     return None
-
 
 # Start the telegram bot
 if __name__ == "__main__":

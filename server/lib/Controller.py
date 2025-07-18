@@ -13,6 +13,8 @@ load_dotenv()
 
 class Controller:
 
+    # TODO Need to add the sqlite databse to write transfers to
+
     def __init__(self):
         """Initialize the FetchData class with db instance and known_tokens list"""
         self.db = self.get_db_instance()
@@ -36,6 +38,9 @@ class Controller:
         """
         timer(self.update_distributors_transactions, 300)
 
+    ##########################################################
+    #           Get Recent Transactions for Projects         #
+    ##########################################################
     def update_distributors_transactions(self):
         """This will loop through each supported project and get any new transfers"""
         projects = self.get_supported_projects_from_db()
@@ -45,7 +50,7 @@ class Controller:
 
             self.fetch_and_process_new_distributor_transactions(distributor)
 
-        # print("Update complete")
+        print("Update complete")
 
     def fetch_and_process_new_distributor_transactions(self, distributor):
         """
@@ -126,10 +131,10 @@ class Controller:
             aggregated_batch = aggregate_transfers(batch)
             updated = self.db.insert_wallet_rewards(aggregated_batch)
             total_inserted += updated
-            # print(
-            #     f"Aggregated Rewards Batch: {batch_num}/{total_batches} Total updated: {total_inserted} "
-            # )
 
+    ##########################################################
+    #                          Helpers                       #
+    ##########################################################
     def get_and_add_token_metadata(self, mint_address):
         """
         Fetches token metadata, adds it to the list of known tokens in DB, and returns the symbol of the token added
