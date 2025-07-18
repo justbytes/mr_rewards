@@ -36,8 +36,12 @@ class SQLiteDB:
         self.create_config_tables()
         self.create_config_indexes()
 
+    def __del__(self):
+        """Destructor to ensure connections are closed"""
+        self.close_connections()
+
     ##########################################################
-    #                         DB Config                      #
+    #                         DB Tables                      #
     ##########################################################
     def create_config_tables(self):
         """Creates the tables for the dbs"""
@@ -48,6 +52,21 @@ class SQLiteDB:
         # Temp transfers db
         self.temp_transfers_cursor.execute(transfers)
 
+    def create_distributor_tables(self, distributor):
+        """Creates the tables for the dbs"""
+        connection, cursor = self.get_distributors_db(distributor)
+
+        # Create the transfers table
+        cursor.execute(transfers)
+
+        # Only needed when initializing new projects
+        if self.temp:
+            cursor.execute(temp_transactions)
+            cursor.execute(temp_txs_last_sigs)
+
+    ##########################################################
+    #                        DB Indexes                      #
+    ##########################################################
     def create_config_indexes(self):
         """ Config indexes for better lookups """
         try:
@@ -88,18 +107,6 @@ class SQLiteDB:
             print(f"Error when creating config indexes! {e}")
             return False
 
-    def create_distributor_tables(self, distributor):
-        """Creates the tables for the dbs"""
-        connection, cursor = self.get_distributors_db(distributor)
-
-        # Create the transfers table
-        cursor.execute(transfers)
-
-        # Only needed when initializing new projects
-        if self.temp:
-            cursor.execute(temp_transactions)
-            cursor.execute(temp_txs_last_sigs)
-
     def create_distributor_indexes(self, distributor):
 
         # Delete any duplicates before trying to make the indexes
@@ -138,6 +145,17 @@ class SQLiteDB:
             print(f"Error when creating transfer indexes! {e}")
             return False
 
+    ##########################################################
+    #                DB Connection Management                #
+    ##########################################################
+    def get_distributors_db(self, distributor):
+        connection = sqlite3.connect(
+            f"backup/transfers/{distributor}.db"
+        )
+        cursor = connection.cursor()
+
+        return connection, cursor
+
     def close_connections(self):
         """Close all database connections"""
         try:
@@ -154,14 +172,9 @@ class SQLiteDB:
         except Exception as e:
             print(f"Error closing distributor: {distributor} connection: {e}")
 
-    def get_distributors_db(self, distributor):
-        connection = sqlite3.connect(
-            f"backup/transfers/{distributor}.db"
-        )
-        cursor = connection.cursor()
-
-        return connection, cursor
-
+    ##########################################################
+    #                       DB Clean Up                      #
+    ##########################################################
     def clean_and_remove_temp_data(self, distributor):
         """
         This removes any duplicates from processing the transactions and removes them. Then it creates the
@@ -181,113 +194,40 @@ class SQLiteDB:
 
         return True
 
-    ##########################################################
-    #                       DB Functions                     #
-    ##########################################################
-    def insert_transfer_batch(self, distributor, batch, batch_size=5000):
-        """
-        Insert a batch of transfers into the transfers table of the distributor db. This will
-        be used to store the transfers by distributor from the transfers in the config db transfers table
-        """
+    def drop_temp_tables(self, distributor):
+        """Drop temporary tables used for transaction processing."""
+        # Tables to drop
+        temp_tables = [
+            'temp_transactions',
+            'temp_txs_last_sigs'
+        ]
+
         connection, cursor = self.get_distributors_db(distributor)
 
         try:
-            # Process in batches to avoid memory issues with large datasets
-            for i in range(0, len(batch), batch_size):
-                batch_chunk = batch[i : i + batch_size]
-
-                # Prepare data for insertion
-                data_to_insert = []
-                for transfer in batch_chunk:
-                    data_to_insert.append(
-                        (
-                            transfer.get("signature", ""),
-                            transfer.get("slot", 0),
-                            transfer.get("timestamp", 0),
-                            transfer.get("amount", 0.0),
-                            transfer.get("token", ""),
-                            transfer.get("wallet_address", ""),
-                            transfer.get("distributor", ""),
-                        )
-                    )
-
-                # Insert batch
-                cursor.executemany(
-                    """INSERT INTO transfers
-                       (signature, slot, timestamp, amount, token, wallet_address, distributor)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    data_to_insert,
-                )
+            for table in temp_tables:
+                cursor.execute(f"DROP TABLE IF EXISTS {table}")
+                print(f"Dropped table: {table}")
 
             connection.commit()
-            # print(f"Successfully inserted {len(batch)} transfers")
             return True
-
         except Exception as e:
-            print(f"Error inserting transfer batch: {e}")
-            connection.rollback()
+            print(f"Error dropping table: {e}")
             return False
 
-    def insert_or_update_wallets(self, wallets_data):
-        """
-        Insert or update wallet information in the wallets table
-        """
-        try:
-            for wallet in wallets_data:
-                wallet_address = wallet.get("wallet_address", "")
-                distributors = wallet.get("distributors", "")
+    ##########################################################
+    #               Supported Projects Functions             #
+    ##########################################################
+    def get_supported_projects(self):
+        pass
 
-                # Check if wallet already exists
-                self.config_cursor.execute(
-                    """SELECT id FROM wallets WHERE wallet_address = ?""",
-                    (wallet_address,),
-                )
-                existing = self.config_cursor.fetchone()
+    def get_supported_project(self, project):
+        pass
 
-                if existing:
-                    # Update existing wallet
-                    self.config_cursor.execute(
-                        """UPDATE wallets SET distributors = ? WHERE wallet_address = ?""",
-                        (distributors, wallet_address),
-                    )
-                else:
-                    # Insert new wallet
-                    self.config_cursor.execute(
-                        """INSERT INTO wallets (wallet_address, distributors) VALUES (?, ?)""",
-                        (wallet_address, distributors),
-                    )
+    def get_supported_project_count(self):
+        pass
 
-            self.config_connection.commit()
-            print(f"Successfully processed {len(wallets_data)} wallets")
-
-        except Exception as e:
-            print(f"Error inserting/updating wallets: {e}")
-            self.config_connection.rollback()
-
-    def insert_known_token(self, known_token):
-        """
-        Insert a known token into the known_tokens table
-        """
-        try:
-            self.config_cursor.execute(
-                """INSERT INTO known_tokens (symbol, name, mint, decimals) VALUES (?, ?, ?, ?)""",
-                (
-                    known_token.get("symbol"),
-                    known_token.get("name"),
-                    known_token.get("mint"),
-                    known_token.get("decimals", ""),
-                ),
-            )
-            self.config_connection.commit()
-            print(
-                f"Successfully inserted known token: {known_token.get('symbol')}"
-            )
-
-        except Exception as e:
-            print(f"Error inserting known token: {e}")
-            self.config_connection.rollback()
-
-    def insert_supported_project(self, supported_project):
+    def insert_supported_project(self, project):
         """
         Insert a supported project into the supported_projects table
         """
@@ -296,16 +236,16 @@ class SQLiteDB:
                 """INSERT INTO supported_projects (name, distributor, token_mint, dev_wallet, last_sig)
                    VALUES (?, ?, ?, ?, ?)""",
                 (
-                    supported_project.get("name"),
-                    supported_project.get("distributor"),
-                    supported_project.get("token_mint"),
-                    supported_project.get("dev_wallet", ""),
-                    supported_project.get("last_sig", ""),
+                    project.get("name"),
+                    project.get("distributor"),
+                    project.get("token_mint"),
+                    project.get("dev_wallet", ""),
+                    project.get("last_sig", ""),
                 ),
             )
             self.config_connection.commit()
             print(
-                f"Successfully inserted supported project: {supported_project.get('name')}"
+                f"Successfully inserted supported project: {project.get('name')}"
             )
             return True
 
@@ -314,26 +254,59 @@ class SQLiteDB:
             self.config_connection.rollback()
             return False
 
-    def get_supported_projects(self, projects):
+    def update_supported_project(self, updated_project):
         pass
 
+    ##########################################################
+    #                  Known Tokens Functions                #
+    ##########################################################
     def get_known_tokens(self):
         pass
 
-    def get_wallet_data(self, wallet_address):
+    def get_known_token(self, token):
         pass
 
-    def get_transfers(self, distributor, offset, batch_size=1000):
+    def get_known_token_count(self):
+        pass
+
+    def insert_known_token(self, token):
+        """
+        Insert a known token into the known_tokens table
+        """
+        try:
+            self.config_cursor.execute(
+                """INSERT INTO known_tokens (symbol, name, mint, decimals) VALUES (?, ?, ?, ?)""",
+                (
+                    token.get("symbol"),
+                    token.get("name"),
+                    token.get("mint"),
+                    token.get("decimals", ""),
+                ),
+            )
+            self.config_connection.commit()
+            print(
+                f"Successfully inserted known token: {token.get('symbol')}"
+            )
+
+        except Exception as e:
+            print(f"Error inserting known token: {e}")
+            self.config_connection.rollback()
+
+    def update_known_token(self, token):
+        pass
+
+    ##########################################################
+    #                 Transactions Functions                 #
+    ##########################################################
+    def get_transactions(self, distributor, offset, batch_size=1000):
         """
         Generator that yields batches with resume capability.
         """
-
         connection, cursor = self.get_distributors_db(distributor)
-
         try:
             current_offset = offset
-            query = """SELECT signature, slot, timestamp, amount, token, wallet_address, distributor
-                        FROM transfers
+            query = """SELECT fee_payer, signature, slot, timestamp, token_transfers, native_transfers
+                        FROM temp_transactions
                         ORDER BY id ASC
                         LIMIT ? OFFSET ?"""
 
@@ -346,21 +319,20 @@ class SQLiteDB:
                     break
 
                 # Parse JSON strings back to Python objects
-                transfers = []
+                transactions = []
                 for row in results:
                     tx = {
-                        "signature": row[0],
-                        "slot": row[1],
-                        "timestamp": row[2],
-                        "amount": row[3],
-                        "token": row[4],
-                        "wallet_address": row[5],
-                        "distributor": row[6]
+                        "fee_payer": row[0],
+                        "signature": row[1],
+                        "slot": row[2],
+                        "timestamp": row[3],
+                        "token_transfers": json.loads(row[4]) if row[4] else [],
+                        "native_transfers": json.loads(row[5]) if row[5] else [],
                     }
-                    transfers.append(tx)
+                    transactions.append(tx)
 
                 # Yield the batch and current offset
-                yield transfers, current_offset
+                yield transactions, current_offset
 
                 current_offset += batch_size
 
@@ -368,14 +340,13 @@ class SQLiteDB:
             print(f"Error retrieving temp transactions batch: {e}")
             return None, current_offset
 
-    def get_transfers_count(self, distributor):
+    def get_transactions_count(self, distributor):
         """
-        Get the total count of distributor transfers in the transfers table
+        Get the total count of temporary transactions in the temp_transactions table
         """
         connection, cursor = self.get_distributors_db(distributor)
-
         try:
-            cursor.execute("SELECT COUNT(*) FROM transfers")
+            cursor.execute("SELECT COUNT(*) FROM temp_transactions")
             result = cursor.fetchone()
             return result[0] if result else 0
 
@@ -383,54 +354,7 @@ class SQLiteDB:
             print(f"Error getting temp transactions count: {e}")
             return 0
 
-    def delete_duplicate_transfers(self, distributor):
-        """
-        Delete duplicate records from the transfers table based on the unique constraint
-        (wallet_address, distributor, signature, slot, timestamp, token, amount)
-        """
-        connection, cursor = self.get_distributors_db(distributor)
-        try:
-            # First, let's check if there are duplicates
-            cursor.execute("""
-                SELECT wallet_address, distributor, signature, slot, timestamp, token, amount, COUNT(*) as count
-                FROM transfers
-                GROUP BY wallet_address, distributor, signature, slot, timestamp, token, amount
-                HAVING COUNT(*) > 1
-            """)
-
-            duplicates = cursor.fetchall()
-
-            if not duplicates:
-                print("No duplicates found in transfers table")
-                return True
-
-            print(f"Found {len(duplicates)} groups of duplicate records")
-
-            # Delete duplicates, keeping only the first occurrence (lowest id)
-            cursor.execute("""
-                DELETE FROM transfers
-                WHERE id NOT IN (
-                    SELECT MIN(id)
-                    FROM transfers
-                    GROUP BY wallet_address, distributor, signature, slot, timestamp, token, amount
-                )
-            """)
-
-            deleted_count = cursor.rowcount
-            connection.commit()
-
-            print(f"Successfully deleted {deleted_count} duplicate records from transfers table")
-            return True
-
-        except Exception as e:
-            print(f"Error deleting duplicates: {e}")
-            connection.rollback()
-            return False
-
-    ##########################################################
-    #                    DB Temp Functions                   #
-    ##########################################################
-    def insert_temp_txs_batch(self, distributor, batch, batch_size=5000):
+    def insert_transactions_batch(self, distributor, batch, batch_size=5000):
         """
         Insert a batch of temporary transactions into the temp_transactions table.
         Optimized for performance with larger batch sizes and better SQLite settings.
@@ -483,6 +407,375 @@ class SQLiteDB:
             self.distributor_connection.rollback()
             return False
 
+    ##########################################################
+    #                    Transfer Functions                  #
+    ##########################################################
+    def get_transfers(self, distributor, offset, batch_size=1000):
+        """
+        Generator that yields batches with resume capability.
+        """
+        connection, cursor = self.get_distributors_db(distributor)
+
+        try:
+            current_offset = offset
+            query = """SELECT signature, slot, timestamp, amount, token, wallet_address, distributor
+                        FROM transfers
+                        ORDER BY id ASC
+                        LIMIT ? OFFSET ?"""
+
+            while True:
+                cursor.execute(query, (batch_size, current_offset))
+                results = cursor.fetchall()
+
+                if not results:
+                    # No more data to process - successful completion
+                    break
+
+                # Parse JSON strings back to Python objects
+                transfers = []
+                for row in results:
+                    tx = {
+                        "signature": row[0],
+                        "slot": row[1],
+                        "timestamp": row[2],
+                        "amount": row[3],
+                        "token": row[4],
+                        "wallet_address": row[5],
+                        "distributor": row[6]
+                    }
+                    transfers.append(tx)
+
+                # Yield the batch and current offset
+                yield transfers, current_offset
+
+                current_offset += batch_size
+
+        except Exception as e:
+            print(f"Error retrieving temp transactions batch: {e}")
+            return None, current_offset
+
+    def get_transfers_count(self, distributor):
+        """
+        Get the total count of temporary transfers in the transfers table
+        """
+        connection, cursor = self.get_distributors_db(distributor)
+        try:
+            cursor.execute("SELECT COUNT(*) FROM transfers")
+            result = cursor.fetchone()
+            return result[0] if result else 0
+
+        except Exception as e:
+            print(f"Error getting transfers count for {distributor}: {e}")
+            return 0
+
+    def insert_transfer_batch(self, distributor, batch, batch_size=5000):
+        """
+        Insert a batch of transfers into the transfers table of the distributor db. This will
+        be used to store the transfers by distributor from the transfers in the config db transfers table
+        """
+        connection, cursor = self.get_distributors_db(distributor)
+
+        try:
+            # Process in batches to avoid memory issues with large datasets
+            for i in range(0, len(batch), batch_size):
+                batch_chunk = batch[i : i + batch_size]
+
+                # Prepare data for insertion
+                data_to_insert = []
+                for transfer in batch_chunk:
+                    data_to_insert.append(
+                        (
+                            transfer.get("signature", ""),
+                            transfer.get("slot", 0),
+                            transfer.get("timestamp", 0),
+                            transfer.get("amount", 0.0),
+                            transfer.get("token", ""),
+                            transfer.get("wallet_address", ""),
+                            transfer.get("distributor", ""),
+                        )
+                    )
+
+                # Insert batch
+                cursor.executemany(
+                    """INSERT INTO transfers
+                       (signature, slot, timestamp, amount, token, wallet_address, distributor)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    data_to_insert,
+                )
+
+            connection.commit()
+            # print(f"Successfully inserted {len(batch)} transfers")
+            return True
+
+        except Exception as e:
+            print(f"Error inserting transfer batch: {e}")
+            connection.rollback()
+            return False
+
+    def delete_duplicate_transfers(self, distributor):
+        """
+        Delete duplicate records from the transfers table based on the unique constraint
+        (wallet_address, distributor, signature, slot, timestamp, token, amount)
+        """
+        connection, cursor = self.get_distributors_db(distributor)
+        try:
+            # First, let's check if there are duplicates
+            cursor.execute("""
+                SELECT wallet_address, distributor, signature, slot, timestamp, token, amount, COUNT(*) as count
+                FROM transfers
+                GROUP BY wallet_address, distributor, signature, slot, timestamp, token, amount
+                HAVING COUNT(*) > 1
+            """)
+
+            duplicates = cursor.fetchall()
+
+            if not duplicates:
+                print("No duplicates found in transfers table")
+                return True
+
+            print(f"Found {len(duplicates)} groups of duplicate records")
+
+            # Delete duplicates, keeping only the first occurrence (lowest id)
+            cursor.execute("""
+                DELETE FROM transfers
+                WHERE id NOT IN (
+                    SELECT MIN(id)
+                    FROM transfers
+                    GROUP BY wallet_address, distributor, signature, slot, timestamp, token, amount
+                )
+            """)
+
+            deleted_count = cursor.rowcount
+            connection.commit()
+
+            print(f"Successfully deleted {deleted_count} duplicate records from transfers table")
+            return True
+
+        except Exception as e:
+            print(f"Error deleting duplicates: {e}")
+            connection.rollback()
+            return False
+
+    ##########################################################
+    #                 Temp Transfer Functions                #
+    ##########################################################
+    def get_temp_transfers(self, offset, batch_size=1000):
+        """
+        Generator that yields batches with resume capability.
+        """
+        try:
+            current_offset = offset
+            query = """SELECT signature, slot, timestamp, amount, token, wallet_address, distributor
+                        FROM transfers
+                        ORDER BY id ASC
+                        LIMIT ? OFFSET ?"""
+
+            while True:
+                self.temp_transfers_cursor.execute(query, (batch_size, current_offset))
+                results = self.temp_transfers_cursor.fetchall()
+
+                if not results:
+                    # No more data to process - successful completion
+                    break
+
+                # Parse JSON strings back to Python objects
+                transfers = []
+                for row in results:
+                    tx = {
+                        "signature": row[0],
+                        "slot": row[1],
+                        "timestamp": row[2],
+                        "amount": row[3],
+                        "token": row[4],
+                        "wallet_address": row[5],
+                        "distributor": row[6]
+                    }
+                    transfers.append(tx)
+
+                # Yield the batch and current offset
+                yield transfers, current_offset
+
+                current_offset += batch_size
+
+        except Exception as e:
+            print(f"Error retrieving temp transactions batch: {e}")
+            return None, current_offset
+
+    def get_temp_transfers_count(self):
+        """
+        Get the total count of temporary transfers in the transfers table
+        """
+        try:
+            self.temp_transfers_cursor.execute("SELECT COUNT(*) FROM transfers")
+            result = self.temp_transfers_cursor.fetchone()
+            return result[0] if result else 0
+
+        except Exception as e:
+            print(f"Error getting temp transactions count: {e}")
+            return 0
+
+    def insert_temp_transfers_batch(self, batch, batch_size=5000):
+        """
+        Insert a batch of temp transfers config db. Later this will be pulled and placed in
+        the proper db on the local backup. This table will store many distributors
+        """
+        try:
+            # Process in batches to avoid memory issues with large datasets
+            for i in range(0, len(batch), batch_size):
+                batch_chunk = batch[i : i + batch_size]
+
+                # Prepare data for insertion
+                data_to_insert = []
+                for transfer in batch_chunk:
+                    data_to_insert.append(
+                        (
+                            transfer.get("signature", ""),
+                            transfer.get("slot", 0),
+                            transfer.get("timestamp", 0),
+                            transfer.get("amount", 0.0),
+                            transfer.get("token", ""),
+                            transfer.get("wallet_address", ""),
+                            transfer.get("distributor", ""),
+                        )
+                    )
+
+                # Insert batch
+                self.temp_transfers_cursor_cursor.executemany(
+                    """INSERT INTO transfers
+                       (signature, slot, timestamp, amount, token, wallet_address, distributor)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    data_to_insert,
+                )
+
+            self.temp_transfers_connection.commit()
+            # print(f"Successfully inserted {len(batch)} transfers")
+            return True
+
+        except Exception as e:
+            print(f"Error inserting transfer batch: {e}")
+            self.temp_transfers_connection.rollback()
+            return False
+
+    def delete_duplicate_temp_transfers(self):
+        """
+        Delete duplicate records from the transfers table based on the unique constraint
+        (wallet_address, distributor, signature, slot, timestamp, token, amount)
+        """
+        try:
+            # First, let's check if there are duplicates
+            self.temp_transfers_cursor.execute("""
+                SELECT wallet_address, distributor, signature, slot, timestamp, token, amount, COUNT(*) as count
+                FROM transfers
+                GROUP BY wallet_address, distributor, signature, slot, timestamp, token, amount
+                HAVING COUNT(*) > 1
+            """)
+
+            duplicates = self.temp_transfers_cursor.fetchall()
+
+            if not duplicates:
+                print("No duplicates found in transfers table")
+                return True
+
+            print(f"Found {len(duplicates)} groups of duplicate records")
+
+            # Delete duplicates, keeping only the first occurrence (lowest id)
+            self.temp_transfers_cursor.execute("""
+                DELETE FROM transfers
+                WHERE id NOT IN (
+                    SELECT MIN(id)
+                    FROM transfers
+                    GROUP BY wallet_address, distributor, signature, slot, timestamp, token, amount
+                )
+            """)
+
+            deleted_count = cursor.rowcount
+            self.temp_transfers_connection.commit()
+
+            print(f"Successfully deleted {deleted_count} duplicate records from transfers table")
+            return True
+
+        except Exception as e:
+            print(f"Error deleting duplicates: {e}")
+            self.temp_transfers_connection.rollback()
+            return False
+
+    def delete_all_transfers(self):
+        """
+        After all of the transfers have been copied to the backup db we can delete everything
+        from the transfers table to free up space
+        """
+        pass
+
+    ##########################################################
+    #                     Wallets Functions                  #
+    ##########################################################
+    def get_wallets(self):
+        pass
+
+    def get_wallet_data(self, wallet_address):
+        pass
+
+    def get_wallets_count(self):
+        pass
+
+    def insert_wallet_batch(self, wallets, batch_size=1000):
+        """
+        Insert or update wallet information in the wallets table
+        """
+        try:
+            for wallet in wallets_data:
+                wallet_address = wallet.get("wallet_address", "")
+                distributors = wallet.get("distributors", "")
+
+                # Check if wallet already exists
+                self.config_cursor.execute(
+                    """SELECT id FROM wallets WHERE wallet_address = ?""",
+                    (wallet_address,),
+                )
+                existing = self.config_cursor.fetchone()
+
+                if existing:
+                    # Update existing wallet
+                    self.config_cursor.execute(
+                        """UPDATE wallets SET distributors = ? WHERE wallet_address = ?""",
+                        (distributors, wallet_address),
+                    )
+                else:
+                    # Insert new wallet
+                    self.config_cursor.execute(
+                        """INSERT INTO wallets (wallet_address, distributors) VALUES (?, ?)""",
+                        (wallet_address, distributors),
+                    )
+
+            self.config_connection.commit()
+            print(f"Successfully processed {len(wallets_data)} wallets")
+
+        except Exception as e:
+            print(f"Error inserting/updating wallets: {e}")
+            self.config_connection.rollback()
+
+    ##########################################################
+    #                 Last Signature Functions               #
+    ##########################################################
+    def get_temp_txs_last_sigs(self, distributor):
+        """
+        Get the last signatures from temp_txs_last_sigs table
+        """
+        connection, cursor = self.get_distributors_db(distributor)
+        try:
+            cursor.execute(
+                """SELECT before, last_sig FROM temp_txs_last_sigs ORDER BY id DESC LIMIT 1"""
+            )
+            result = cursor.fetchone()
+
+            if result:
+                return result[0], result[1]
+            return None, None
+
+        except Exception as e:
+            print(f"Error getting temp_txs last signatures: {e}")
+            return None, None
+
     def update_temp_txs_before_sig(self, distributor, new_sig):
         """
         Update the 'before' signature in temp_txs_last_sigs table.
@@ -531,247 +824,6 @@ class SQLiteDB:
             print(f"Error updating temp_txs last signature: {e}")
             connection.rollback()
             return False
-
-    def insert_temp_transfers_batch(self, batch, batch_size=5000):
-        """
-        Insert a batch of temp transfers config db. Later this will be pulled and placed in
-        the proper db on the local backup. This table will store many distributors
-        """
-        try:
-            # Process in batches to avoid memory issues with large datasets
-            for i in range(0, len(batch), batch_size):
-                batch_chunk = batch[i : i + batch_size]
-
-                # Prepare data for insertion
-                data_to_insert = []
-                for transfer in batch_chunk:
-                    data_to_insert.append(
-                        (
-                            transfer.get("signature", ""),
-                            transfer.get("slot", 0),
-                            transfer.get("timestamp", 0),
-                            transfer.get("amount", 0.0),
-                            transfer.get("token", ""),
-                            transfer.get("wallet_address", ""),
-                            transfer.get("distributor", ""),
-                        )
-                    )
-
-                # Insert batch
-                self.temp_transfers_cursor_cursor.executemany(
-                    """INSERT INTO transfers
-                       (signature, slot, timestamp, amount, token, wallet_address, distributor)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    data_to_insert,
-                )
-
-            self.temp_transfers_connection.commit()
-            # print(f"Successfully inserted {len(batch)} transfers")
-            return True
-
-        except Exception as e:
-            print(f"Error inserting transfer batch: {e}")
-            self.temp_transfers_connection.rollback()
-            return False
-
-    def get_temp_txs_last_sigs(self, distributor):
-        """
-        Get the last signatures from temp_txs_last_sigs table
-        """
-        connection, cursor = self.get_distributors_db(distributor)
-        try:
-            cursor.execute(
-                """SELECT before, last_sig FROM temp_txs_last_sigs ORDER BY id DESC LIMIT 1"""
-            )
-            result = cursor.fetchone()
-
-            if result:
-                return result[0], result[1]
-            return None, None
-
-        except Exception as e:
-            print(f"Error getting temp_txs last signatures: {e}")
-            return None, None
-
-    def get_temp_transactions(self, distributor, offset, batch_size=1000):
-        """
-        Generator that yields batches with resume capability.
-        """
-        connection, cursor = self.get_distributors_db(distributor)
-        try:
-            current_offset = offset
-            query = """SELECT fee_payer, signature, slot, timestamp, token_transfers, native_transfers
-                        FROM temp_transactions
-                        ORDER BY id ASC
-                        LIMIT ? OFFSET ?"""
-
-            while True:
-                cursor.execute(query, (batch_size, current_offset))
-                results = cursor.fetchall()
-
-                if not results:
-                    # No more data to process - successful completion
-                    break
-
-                # Parse JSON strings back to Python objects
-                transactions = []
-                for row in results:
-                    tx = {
-                        "fee_payer": row[0],
-                        "signature": row[1],
-                        "slot": row[2],
-                        "timestamp": row[3],
-                        "token_transfers": json.loads(row[4]) if row[4] else [],
-                        "native_transfers": json.loads(row[5]) if row[5] else [],
-                    }
-                    transactions.append(tx)
-
-                # Yield the batch and current offset
-                yield transactions, current_offset
-
-                current_offset += batch_size
-
-        except Exception as e:
-            print(f"Error retrieving temp transactions batch: {e}")
-            return None, current_offset
-
-    def get_temp_transfers(self, offset, batch_size=1000):
-        """
-        Generator that yields batches with resume capability.
-        """
-        try:
-            current_offset = offset
-            query = """SELECT signature, slot, timestamp, amount, token, wallet_address, distributor
-                        FROM transfers
-                        ORDER BY id ASC
-                        LIMIT ? OFFSET ?"""
-
-            while True:
-                self.temp_transfers_cursor.execute(query, (batch_size, current_offset))
-                results = self.temp_transfers_cursor.fetchall()
-
-                if not results:
-                    # No more data to process - successful completion
-                    break
-
-                # Parse JSON strings back to Python objects
-                transfers = []
-                for row in results:
-                    tx = {
-                        "signature": row[0],
-                        "slot": row[1],
-                        "timestamp": row[2],
-                        "amount": row[3],
-                        "token": row[4],
-                        "wallet_address": row[5],
-                        "distributor": row[6]
-                    }
-                    transfers.append(tx)
-
-                # Yield the batch and current offset
-                yield transfers, current_offset
-
-                current_offset += batch_size
-
-        except Exception as e:
-            print(f"Error retrieving temp transactions batch: {e}")
-            return None, current_offset
-
-    def get_temp_transactions_count(self, distributor):
-        """
-        Get the total count of temporary transactions in the temp_transactions table
-        """
-        connection, cursor = self.get_distributors_db(distributor)
-        try:
-            cursor.execute("SELECT COUNT(*) FROM temp_transactions")
-            result = cursor.fetchone()
-            return result[0] if result else 0
-
-        except Exception as e:
-            print(f"Error getting temp transactions count: {e}")
-            return 0
-
-    def get_temp_transfers_count(self):
-        """
-        Get the total count of temporary transfers in the transfers table
-        """
-        try:
-            self.temp_transfers_cursor.execute("SELECT COUNT(*) FROM transfers")
-            result = self.temp_transfers_cursor.fetchone()
-            return result[0] if result else 0
-
-        except Exception as e:
-            print(f"Error getting temp transactions count: {e}")
-            return 0
-
-    def delete_duplicate_temp_transfers(self):
-        """
-        Delete duplicate records from the transfers table based on the unique constraint
-        (wallet_address, distributor, signature, slot, timestamp, token, amount)
-        """
-        try:
-            # First, let's check if there are duplicates
-            self.temp_transfers_cursor.execute("""
-                SELECT wallet_address, distributor, signature, slot, timestamp, token, amount, COUNT(*) as count
-                FROM transfers
-                GROUP BY wallet_address, distributor, signature, slot, timestamp, token, amount
-                HAVING COUNT(*) > 1
-            """)
-
-            duplicates = self.temp_transfers_cursor.fetchall()
-
-            if not duplicates:
-                print("No duplicates found in transfers table")
-                return True
-
-            print(f"Found {len(duplicates)} groups of duplicate records")
-
-            # Delete duplicates, keeping only the first occurrence (lowest id)
-            self.temp_transfers_cursor.execute("""
-                DELETE FROM transfers
-                WHERE id NOT IN (
-                    SELECT MIN(id)
-                    FROM transfers
-                    GROUP BY wallet_address, distributor, signature, slot, timestamp, token, amount
-                )
-            """)
-
-            deleted_count = cursor.rowcount
-            self.temp_transfers_connection.commit()
-
-            print(f"Successfully deleted {deleted_count} duplicate records from transfers table")
-            return True
-
-        except Exception as e:
-            print(f"Error deleting duplicates: {e}")
-            self.temp_transfers_connection.rollback()
-            return False
-
-    def drop_temp_tables(self, distributor):
-        """Drop temporary tables used for transaction processing."""
-        # Tables to drop
-        temp_tables = [
-            'temp_transactions',
-            'temp_txs_last_sigs'
-        ]
-
-        connection, cursor = self.get_distributors_db(distributor)
-
-        try:
-            for table in temp_tables:
-                cursor.execute(f"DROP TABLE IF EXISTS {table}")
-                print(f"Dropped table: {table}")
-
-            connection.commit()
-            return True
-        except Exception as e:
-            print(f"Error dropping table: {e}")
-            return False
-
-
-    def __del__(self):
-        """Destructor to ensure connections are closed"""
-        self.close_connections()
 
 if __name__ == "__main__":
     b = SQLiteDB("HHBkrmzwY7TbDG3G5C4D52LPPd8JEs5oiKWHaPxksqvd")
