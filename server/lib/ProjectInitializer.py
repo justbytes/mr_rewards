@@ -138,7 +138,7 @@ class ProjectInitializer:
 
             # Save transactions to file
             if txs_batch.get("txs"):
-                success = self.sqlite_db.insert_temp_txs_batch(self.distributor, txs_batch.get("txs"))
+                success = self.sqlite_db.insert_transactions_batch(self.distributor, txs_batch.get("txs"))
 
                 # False means data didn't get saved and we should retry and increment the error counter
                 if success is False:
@@ -176,14 +176,14 @@ class ProjectInitializer:
             return False
 
         # Get total count for progress tracking
-        total_count = self.sqlite_db.get_temp_transactions_count(self.distributor)
+        total_count = self.sqlite_db.get_transactions_count(self.distributor)
         processed_count = self.txs_offset
 
         print(f"Starting to process {total_count} transactions from offset {self.txs_offset}")
 
         try:
             # Use the generator
-            for transactions, current_offset in self.sqlite_db.get_temp_transactions(self.distributor, self.txs_offset):
+            for transactions, current_offset in self.sqlite_db.get_transactions(self.distributor, self.txs_offset):
 
                 if transactions is None:
                     error_count += 1

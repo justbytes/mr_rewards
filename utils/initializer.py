@@ -1,4 +1,4 @@
-from server.lib.ProjectInitializer import ProjectInitializer
+from ..server.lib.ProjectInitializer import ProjectInitializer
 
 def initializer():
     """
