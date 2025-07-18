@@ -219,13 +219,102 @@ class SQLiteDB:
     #               Supported Projects Functions             #
     ##########################################################
     def get_supported_projects(self):
-        pass
+        """
+        Get all supported projects from the supported_projects table
+        """
+        try:
+            self.config_cursor.execute(
+                """SELECT name, distributor, token_mint, dev_wallet, last_sig
+                FROM supported_projects ORDER BY name"""
+            )
+            results = self.config_cursor.fetchall()
 
-    def get_supported_project(self, project):
-        pass
+            # Convert to list of dictionaries for consistency with MongoDB
+            projects = []
+            for row in results:
+                project = {
+                    "name": row[0],
+                    "distributor": row[1],
+                    "token_mint": row[2],
+                    "dev_wallet": row[3],
+                    "last_sig": row[4]
+                }
+                projects.append(project)
+
+            return projects
+
+        except Exception as e:
+            print(f"Error getting supported projects: {e}")
+            raise
+
+    def get_supported_project(self, distributor):
+        """
+        Get a specific supported project by distributor address
+        """
+        try:
+            self.config_cursor.execute(
+                """SELECT name, distributor, token_mint, dev_wallet, last_sig
+                FROM supported_projects WHERE distributor = ?""",
+                (distributor,)
+            )
+            result = self.config_cursor.fetchone()
+
+            if result:
+                project = {
+                    "name": result[0],
+                    "distributor": result[1],
+                    "token_mint": result[2],
+                    "dev_wallet": result[3],
+                    "last_sig": result[4]
+                }
+                return project
+            else:
+                return None
+
+        except Exception as e:
+            print(f"Error getting supported project with distributor {distributor}: {e}")
+            raise
 
     def get_supported_project_count(self):
-        pass
+        """
+        Get the total count of supported projects
+        """
+        try:
+            self.config_cursor.execute("SELECT COUNT(*) FROM supported_projects")
+            result = self.config_cursor.fetchone()
+            return result[0] if result else 0
+
+        except Exception as e:
+            print(f"Error getting supported projects count: {e}")
+            raise
+
+    def update_supported_project(self, updated_project):
+        """
+        Update an existing supported project by distributor
+        """
+        try:
+            self.config_cursor.execute(
+                """UPDATE supported_projects
+                SET name = ?, token_mint = ?, dev_wallet = ?, last_sig = ?
+                WHERE distributor = ?""",
+                (
+                    updated_project.get("name"),
+                    updated_project.get("token_mint"),
+                    updated_project.get("dev_wallet", ""),
+                    updated_project.get("last_sig", ""),
+                    updated_project.get("distributor")
+                )
+            )
+
+            self.config_connection.commit()
+
+            print(f"Successfully updated supported project: {updated_project.get('name')}")
+            return True
+
+        except Exception as e:
+            print(f"Error updating supported project: {e}")
+            self.config_connection.rollback()
+            raise
 
     def insert_supported_project(self, project):
         """
@@ -252,27 +341,107 @@ class SQLiteDB:
         except Exception as e:
             print(f"Error inserting supported project: {e}")
             self.config_connection.rollback()
-            return False
+            raise
 
-    def update_supported_project(self, updated_project):
-        pass
+    def upsert_supported_project(self, project):
+        """
+        Insert or update a supported project (upsert operation)
+        """
+        try:
+            # Check if project exists
+            existing_project = self.get_supported_project(project.get("distributor"))
+
+            if existing_project:
+                # Update existing project
+                return self.update_supported_project(project)
+            else:
+                # Insert new project
+                return self.insert_supported_project(project)
+
+        except Exception as e:
+            print(f"Error upserting supported project: {e}")
+            raise
 
     ##########################################################
     #                  Known Tokens Functions                #
     ##########################################################
     def get_known_tokens(self):
-        pass
+        """
+        Gets all of the known tokens from the known_tokens table
+        """
+        try:
+            self.config_cursor.execute(
+                """SELECT symbol, name, mint, decimals
+                FROM known_tokens ORDER BY name"""
+            )
+            results = self.config_cursor.fetchall()
 
-    def get_known_token(self, token):
-        pass
+            tokens = []
+            for row in results:
+                token = {
+                    "symbol": row[0],
+                    "name": row[1],
+                    "mint": row[2],
+                    "decimals": row[3]
+                }
+                tokens.append(project)
+
+            return tokens
+
+        except Exception as e:
+            print(f"Error getting known tokens: {e}")
+            raise
+
+    def get_known_token(self, mint):
+        """
+        Gets a specific known token by the mint address from known_tokens table
+        """
+        try:
+            self.config_cursor.execute(
+                """SELECT symbol, name, mint, decimals
+                FROM known_tokens WHERE mint = ?""",
+                (mint,)
+            )
+            result = self.config_cursor.fetchone()
+
+            if result:
+                token = {
+                    "symbol": result[0],
+                    "name": result[1],
+                    "mint": result[2],
+                    "decimals": result[3]
+                }
+                return token
+            else:
+                return None
+
+        except Exception as e:
+            print(f"Error getting known token: {e}")
+            raise
 
     def get_known_token_count(self):
-        pass
+        """
+        Gets the total count of known tokens from known_tokens table
+        """
+        try:
+            self.config_cursor.execute("SELECT COUNT(*) FROM known_tokens")
+            result = self.config_cursor.fetchone()
+            return result[0] if result else 0
+
+        except Exception as e:
+            print(f"Error getting known tokens count: {e}")
+            raise
 
     def insert_known_token(self, token):
         """
-        Insert a known token into the known_tokens table
+        Insert a known token into the known_tokens table if it doesn't exsist already
         """
+        # Check if the token is there already
+        exsists = self.get_known_token(token.get("mint"))
+        if exsists:
+            print("Token is already in known tokens table. Skipping...")
+            return True
+
         try:
             self.config_cursor.execute(
                 """INSERT INTO known_tokens (symbol, name, mint, decimals) VALUES (?, ?, ?, ?)""",
@@ -287,13 +456,12 @@ class SQLiteDB:
             print(
                 f"Successfully inserted known token: {token.get('symbol')}"
             )
+            return True
 
         except Exception as e:
             print(f"Error inserting known token: {e}")
             self.config_connection.rollback()
-
-    def update_known_token(self, token):
-        pass
+            raise
 
     ##########################################################
     #                 Transactions Functions                 #

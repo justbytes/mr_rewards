@@ -1,4 +1,4 @@
-from ..server.lib.BackerUpper import BackerUpper
+from server.lib.BackerUpper import BackerUpper
 
 def backup():
     """

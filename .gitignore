@@ -2,6 +2,6 @@
 Pipfile.lock
 __pycache__/
 backup/
-backup_01/
+temp_backup/
 old_code/
 .DS_Store/
