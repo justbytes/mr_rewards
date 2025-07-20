@@ -92,7 +92,7 @@ class BackerUpper:
             print(f"Could not backup known tokens: {e}")
             raise
 
-    def backup_transfers(self):
+    def backup_all_distributor_transfers(self):
         """
         The AWS has a db soley to hold all of the transfers picked up from the updater. This functions goes through
         this list of transfers and updates each SQLiteDB distributors db with the new transfers
@@ -122,7 +122,24 @@ class BackerUpper:
                 self.sqlite.insert_transfer_batch(distributor, batch)
 
         except Exception as e:
-            print(f"Could not backup transfers: {e}")
+            print(f"Could not backup all transfers: {e}")
+            raise
+
+    def backup_single_distributor_transfers(self, distributor, transfers):
+        """
+        This is used if you have a list of transfers for a distributor and want to back them up
+        """
+        try:
+            # Create the table and indexes if they don't exsist already
+            if not self.sqlite.table_exists(distributor):
+                self.sqlite.create_distributor_tables(distributor)
+                self.sqlite.create_distributor_indexes(distributor)
+
+            # Insert the transfers to the correct distributor
+            self.sqlite.insert_transfer_batch(distributor, transfers)
+
+        except Exception as e:
+            print(f"Could not backup single distributors transfers: {e}")
             raise
 
     def backup_wallets(self, wallets):
@@ -134,7 +151,6 @@ class BackerUpper:
         except Exception as e:
             print(f"Could not backup wallets: {e}")
             return
-
 
 if __name__ == "__main__":
     backup_wallets()

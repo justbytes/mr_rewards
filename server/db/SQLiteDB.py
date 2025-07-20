@@ -338,7 +338,7 @@ class SQLiteDB:
         """
         try:
             self.config_cursor.execute(
-                """INSERT INTO supported_projects (name, distributor, token_mint, dev_wallet, last_sig)
+                """INSERT OR IGNORE INTO supported_projects (name, distributor, token_mint, dev_wallet, last_sig)
                    VALUES (?, ?, ?, ?, ?)""",
                 (
                     project.get("name"),
@@ -460,7 +460,7 @@ class SQLiteDB:
 
         try:
             self.config_cursor.execute(
-                """INSERT INTO known_tokens (symbol, name, mint, decimals) VALUES (?, ?, ?, ?)""",
+                """INSERT OR IGNORE INTO known_tokens (symbol, name, mint, decimals) VALUES (?, ?, ?, ?)""",
                 (
                     token.get("symbol"),
                     token.get("name"),
@@ -691,7 +691,7 @@ class SQLiteDB:
 
                 # Insert batch
                 cursor.executemany(
-                    """INSERT INTO transfers
+                    """INSERT OR IGNORE INTO transfers
                        (signature, slot, timestamp, amount, token, wallet_address, distributor)
                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     data_to_insert,
@@ -893,7 +893,7 @@ class SQLiteDB:
             self.temp_transfers_connection.rollback()
             return False
 
-    def delete_all_transfers(self):
+    def delete_all_temp_transfers(self):
         """
         After all of the transfers have been copied to the backup db we can delete everything
         from the transfers table to free up space
