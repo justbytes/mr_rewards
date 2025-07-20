@@ -130,7 +130,7 @@ class MongoDB:
             print(f"Project '{project['name']}' already exists, skipping...")
             return True
         except Exception as e:
-            print(f"Error adding project to supported project: {e}")
+            print(f"Error adding project to supported project")
             return None
 
     def update_newest_tx_signature_for_distributor(self, distributor, new_sig):
@@ -196,6 +196,21 @@ class MongoDB:
     ##########################################################
     #                    Transfer Functions                  #
     ##########################################################
+    def get_all_transfers(self):
+        """
+        Get all transfer documents
+        """
+        try:
+            collection = self._db.transfers
+
+            # Find all documents where distributor matches, exclude _id field
+            transfers = list(collection.find({}, {"_id": 0}))
+            return transfers
+
+        except Exception as e:
+            print(f"Error getting all transfers")
+            return None
+
     def get_all_transfers_for_distributor(self, distributor):
         """
         Get all transfer documents for a specific distributor (without _id field)
@@ -208,7 +223,7 @@ class MongoDB:
             return transfers
 
         except Exception as e:
-            print(f"Error getting transfers for distributor {distributor}: {e}")
+            print(f"Error getting transfers for distributor {distributor}")
             return None
 
     def get_transfers_with_wallet_address_and_distributor(
@@ -295,7 +310,7 @@ class MongoDB:
             return wallets
 
         except Exception as e:
-            print(f"Error getting all wallets: {e}")
+            print(f"Error getting all wallets")
             return None
 
     def get_wallet_rewards(self, wallet_address):

@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from ..db.MongoDB import MongoDB
 from ..db.SQLiteDB import SQLiteDB
 from datetime import datetime
+from collections import defaultdict
 
 load_dotenv()
 
@@ -91,13 +92,35 @@ class BackerUpper:
             print(f"Could not backup known tokens: {e}")
             raise
 
-    def backup_transfers(self, transfers):
+    def backup_transfers(self):
         """
         The AWS has a db soley to hold all of the transfers picked up from the updater. This functions goes through
         this list of transfers and updates each SQLiteDB distributors db with the new transfers
         """
         try:
-            pass
+            # Get the transfers from mongo
+            mongo_temp_transfers = self.mongo.get_all_transfers()
+
+            transfers_by_distributor = defaultdict(list)
+
+            for transfer in mongo_temp_transfers:
+                distributor = transfer['distributor']
+                transfers_by_distributor[distributor].append(transfer)
+
+            print(f"Found {len(transfers_by_distributor)} unique distributors")
+
+            # Insert batch for each distributor
+            for distributor, batch in transfers_by_distributor.items():
+                print(f"Inserting {len(batch)} transfers for distributor: {distributor}")
+
+                # Create the table and indexes if they don't exsist already
+                if not self.sqlite.table_exists(distributor):
+                    self.sqlite.create_distributor_tables(distributor)
+                    self.sqlite.create_distributor_indexes(distributor)
+
+                # Insert the transfers to the correct distributor
+                self.sqlite.insert_transfer_batch(distributor, batch)
+
         except Exception as e:
             print(f"Could not backup transfers: {e}")
             raise

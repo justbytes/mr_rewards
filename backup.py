@@ -7,6 +7,6 @@ def backup():
     """
     backer_upper = BackerUpper()
 
-    backer_upper.backup_known_tokens()
+    print(backer_upper.sqlite.get_transfers_count("CvgM6wSDXWCZeCmZnKRQdnh4CSga3UuTXwrCXy9Ju6PC"))
 
 backup()

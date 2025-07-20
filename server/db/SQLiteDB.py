@@ -20,7 +20,7 @@ class SQLiteDB:
     of the wallet rewards data, supported projects and their most recent tx sigs, and known tokens.
     """
 
-    def __init__(self, temp=True):
+    def __init__(self, temp=False):
         """Initialize the BackupDB class by configuring DB's"""
         self.temp = temp
 
@@ -64,6 +64,22 @@ class SQLiteDB:
             cursor.execute(temp_transactions)
             cursor.execute(temp_txs_last_sigs)
 
+    def table_exists(self, distributor, table_name="transfers"):
+        """
+        Check if a table exists in the distributor database
+        """
+        connection, cursor = self.get_distributors_db(distributor)
+        try:
+            cursor.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name=?
+            """, (table_name,))
+
+            return cursor.fetchone() is not None
+
+        except Exception as e:
+            print(f"Error checking if table exists for {distributor}: {e}")
+            return False
     ##########################################################
     #                        DB Indexes                      #
     ##########################################################
@@ -628,6 +644,16 @@ class SQLiteDB:
         """
         connection, cursor = self.get_distributors_db(distributor)
         try:
+            # Check if table exists first
+            cursor.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name='transfers'
+            """)
+
+            if not cursor.fetchone():
+                # Table doesn't exist, return 0
+                return 0
+
             cursor.execute("SELECT COUNT(*) FROM transfers")
             result = cursor.fetchone()
             return result[0] if result else 0
@@ -994,9 +1020,9 @@ class SQLiteDB:
             return False
 
 if __name__ == "__main__":
-    b = SQLiteDB("HHBkrmzwY7TbDG3G5C4D52LPPd8JEs5oiKWHaPxksqvd")
+    b = SQLiteDB()
 
-    success = b.create_transfer_indexes()
+    success = b.get_transfers_count("BoonAKjwqfxj3Z1GtZHWeEMnoZLqgkSFEqRwhRsz4oQ")
     print(success)
 
 
