@@ -29,7 +29,7 @@ class SQLiteDB:
         self.config_cursor = self.config_connection.cursor()
 
         # This one is for the temp transfers
-        self.temp_transfers_connection = sqlite3.connect("backup/temp_transfers")
+        self.temp_transfers_connection = sqlite3.connect("backup/temp_transfers.db")
         self.temp_transfers_cursor = self.temp_transfers_connection.cursor()
 
         # Create the tables if they haven't been already
@@ -431,7 +431,7 @@ class SQLiteDB:
             print(f"Error getting known token: {e}")
             raise
 
-    def get_known_token_count(self):
+    def get_known_tokens_count(self):
         """
         Gets the total count of known tokens from known_tokens table
         """

@@ -13,5 +13,10 @@ black = "*"
 pymongo = {extras = ["srv"], version = "==3.12"}
 slowapi = "*"
 redis = "*"
+pytest = "*"
+pytest-cov = "*"
+pytest-mock = "*"
+pytest-asyncio = "*"
+coverage = "*"
 
 [dev-packages]

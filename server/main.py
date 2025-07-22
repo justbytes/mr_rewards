@@ -1,6 +1,4 @@
-import os
 import uvicorn
-from pathlib import Path
 from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
 from slowapi import _rate_limit_exceeded_handler
@@ -11,8 +9,6 @@ from routes.models import RootResponse
 from lib.Controller import Controller
 from limiter import limiter
 from routes.dependency import set_controller, remove_controller
-from dotenv import load_dotenv
-load_dotenv()
 
 # Initialize the connection to the MongoDB and asign it the global variable
 def initialize_program():

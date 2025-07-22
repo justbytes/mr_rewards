@@ -1,11 +1,12 @@
-from utils.utils import process_distributor_transfers, aggregate_transfers, timer
-from utils.helius import get_token_metadata, get_new_distributor_transactions
+from ..utils.utils import process_distributor_transfers, aggregate_transfers, timer
+from ..utils.helius import get_token_metadata, get_new_distributor_transactions
 
 class ProjectUpdater:
 
     def __init__(self, controller):
         self.controller = controller
         self.begin_polling()
+        self.updating = False
 
     def begin_polling(self):
         """
@@ -15,7 +16,13 @@ class ProjectUpdater:
 
     def update_distributors_transactions(self):
         """This will loop through each supported project and get any new transfers"""
+
+        if updating is True:
+            return
+
         projects = self.controller.sqlite.get_supported_projects()
+
+        updating = True
 
         for project in projects:
             distributor = project.get("distributor")
@@ -23,6 +30,7 @@ class ProjectUpdater:
             self.fetch_and_process_new_distributor_transactions(distributor)
 
         print("Update complete")
+        updating = False
 
     def fetch_and_process_new_distributor_transactions(self, distributor):
         """

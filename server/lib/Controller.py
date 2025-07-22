@@ -1,5 +1,5 @@
-from db.Mongo.db import MongoDB
-from db.SQLite.db import SQLiteDB
+from ..db.Mongo.db import MongoDB
+from ..db.SQLite.db import SQLiteDB
 
 class Controller:
 
