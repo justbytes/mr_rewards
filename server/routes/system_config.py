@@ -14,7 +14,7 @@ router = APIRouter()
 async def get_supported_projects(request: Request, controller: Controller = Depends(get_controller)):
     """Gets the list of supported projects"""
     try:
-        return controller.get_supported_projects_from_db()
+        return controller.mongo.get_supported_projects()
     except:
         raise HTTPException(
             status_code=500, detail=f"Error getting supported projects"

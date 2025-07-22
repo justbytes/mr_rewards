@@ -2,8 +2,8 @@ import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
-from ..db.MongoDB import MongoDB
-from ..db.SQLiteDB import SQLiteDB
+from ..db.Mongo.db import MongoDB
+from ..db.SQLite.db import SQLiteDB
 from datetime import datetime
 from collections import defaultdict
 
@@ -142,12 +142,18 @@ class BackerUpper:
             print(f"Could not backup single distributors transfers: {e}")
             raise
 
-    def backup_wallets(self, wallets):
+    def backup_wallets(self):
         """
         Updates the locla SQLiteDB wallets with incoming wallets data from production
         """
         try:
-            pass
+            mongo_wallets = self.mongo.get_all_wallets()
+            print(f"SQLite wallets: {self.sqlite.get_wallets_count()}")
+            print(f"Mongo wallets: {len(mongo_wallets)}")
+
+            self.sqlite.insert_wallets_batch(mongo_wallets)
+            print(f"SQLite wallets: {self.sqlite.get_wallets_count()}")
+
         except Exception as e:
             print(f"Could not backup wallets: {e}")
             return

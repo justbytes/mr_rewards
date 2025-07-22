@@ -84,7 +84,6 @@ def get_historical_transactions_for_distributor(
         print(f"Yielding final batch. Transaction count: {total_count}")
         yield { "txs": batch, "before": batch_last_sig, "last_sig": newest_sig, "finished": no_more_txs}
 
-
 def get_new_distributor_transactions(
     distributor, until, batch_size=1000
 ):
@@ -157,7 +156,7 @@ def get_new_distributor_transactions(
 
         except:
             print(f"Error when fetching distributor transactions from helius")
-            return 
+            return
 
         # Check if batch is full
         if len(batch) >= batch_size:

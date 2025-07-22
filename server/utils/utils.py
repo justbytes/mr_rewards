@@ -21,7 +21,7 @@ def process_distributor_transactions(transactions):
         )
     return filtered_txs
 
-def process_distributor_transfers(app, transactions, distributor):
+def process_distributor_transfers(controller, transactions, distributor):
     """ Creates a list of transfers """
     total_transfers = []
 
@@ -66,7 +66,7 @@ def process_distributor_transfers(app, transactions, distributor):
 
                 # Gets the the token symbol from the known tokens or adds the token
                 # to the known tokens
-                token = app.get_token_symbol(mint)
+                token = controller.get_token_symbol(mint)
 
                 # Add to transfer to total_transfers list
                 total_transfers.append({

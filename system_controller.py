@@ -11,10 +11,11 @@ This is going to be converted into a C.L.I with options to add and backup data
 ##########################################################
 backer_upper = BackerUpper()
 
-distributor = "GVLwP2iR4sqEX9Tos3cmQQRqAumzRumxKD42qyCbCyCC"
+#Check the initial count
+backer_upper.backup_wallets()
+print(backer_uppessr.mongo.get_wallet_rewards("9dPHyjTpBQSTjnfh2vSCYjbHWgnR37k6mPTeRyZrMz4Q"))
 
-# Check the initial count
-print(backer_upper.sqlite.get_transfers_count(distributor))
+
 
 # filepath = f"/Users/xtox/Coding/mr_rewards/temp_backup/transfers/{distributor}/2025-07-07.json"
 
@@ -44,4 +45,4 @@ print(backer_upper.sqlite.get_transfers_count(distributor))
 # initializer = ProjectInitializer(project)
 
 # # Initialize a new project
-# initializer.initalize_new_project()
+# initializer.initalize_project()

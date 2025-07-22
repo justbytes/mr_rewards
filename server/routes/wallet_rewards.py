@@ -24,7 +24,7 @@ async def get_wallets_rewards(request: Request, wallet_address: str, controller:
 
     # Fetch the data
     try:
-        return controller.get_rewards_with_wallet_address_from_db(wallet_address)
+        return controller.mongo.get_wallet_rewards(wallet_address)
     except:
         raise HTTPException(
             status_code=500, detail="Error getting rewards for wallet and distributor"

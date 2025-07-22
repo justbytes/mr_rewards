@@ -1,25 +1,14 @@
-import asyncio
-import requests
-import os
-import json
-from pathlib import Path
-from dotenv import load_dotenv
-from db.MongoDB import MongoDB
-from db.SQLiteDB import SQLiteDB
-from utils.utils import process_distributor_transfers, aggregate_transfers, timer
-from utils.helius import get_token_metadata, get_new_distributor_transactions
-
-load_dotenv()
+from db.Mongo.db import MongoDB
+from db.SQLite.db import SQLiteDB
 
 class Controller:
 
-    # TODO Need to add the sqlite databse to write transfers to
-
     def __init__(self):
         """Initialize the FetchData class with db instance and known_tokens list"""
-        self.db = self.get_db_instance()
+        self.mongo = MongoDB()
+        self.sqlite = SQLiteDB()
 
-        self.known_tokens = self.get_known_tokens_from_db()
+        self.known_tokens = self.sqlite.get_known_tokens()
 
         # Create a dictionary for O(1) lookups
         self.known_tokens_dict = {
@@ -32,109 +21,99 @@ class Controller:
 
         print(f"Loaded {len(self.known_tokens)} known tokens")
 
-    def begin_polling(self):
+    def upsert_wallets(self, wallets):
         """
-        Runs the update distributors function every five minutes(300 seconds) using the timer utility to check for new transactions
+        This function gets all of the wallets that need to be updated and then adds the new values to the wallets
+        and then updates the wallets in the database
         """
-        timer(self.update_distributors_transactions, 300)
+        if not wallets:
+            return 0
 
-    ##########################################################
-    #           Get Recent Transactions for Projects         #
-    ##########################################################
-    def update_distributors_transactions(self):
-        """This will loop through each supported project and get any new transfers"""
-        projects = self.get_supported_projects_from_db()
+        try:
+            # Extract wallet addresses from the input wallets
+            wallet_addresses = list(wallets.keys())
 
-        for project in projects:
-            distributor = project.get("distributor")
+            # Get existing wallets from SQLite DB
+            existing_wallets = self.sqlite.get_wallets_by_addresses(wallet_addresses)
 
-            self.fetch_and_process_new_distributor_transactions(distributor)
+            update_wallets = []
+            insert_wallets = []
 
-        print("Update complete")
+            # Process each wallet
+            for wallet_address, new_wallet_data in wallets.items():
+                if wallet_address in existing_wallets:
+                    # Wallet exists - merge the distributor data
+                    existing_wallet = existing_wallets[wallet_address]
+                    merged_wallet = self._merge_wallet_distributors(
+                        existing_wallet,
+                        {"wallet_address": wallet_address, "distributors": new_wallet_data["distributors"]}
+                    )
+                    update_wallets.append(merged_wallet)
+                else:
+                    # New wallet - add to insert list
+                    insert_wallets.append({
+                        "wallet_address": wallet_address,
+                        "distributors": new_wallet_data["distributors"]
+                    })
 
-    def fetch_and_process_new_distributor_transactions(self, distributor):
+            # Perform batch operations
+            success_count = 0
+
+            if insert_wallets:
+                success = self.sqlite.insert_wallets_batch(insert_wallets)
+                if success:
+                    success_count += len(insert_wallets)
+                    print(f"Inserted {len(insert_wallets)} new wallets")
+
+            if update_wallets:
+                success = self.sqlite.update_wallets_batch(update_wallets)
+                if success:
+                    success_count += len(update_wallets)
+                    print(f"Updated {len(update_wallets)} existing wallets")
+
+            # TODO: Update MongoDB collections if needed
+            # self._update_mongodb_wallets(insert_wallets + update_wallets)
+
+            return success_count
+
+        except Exception as e:
+            print(f"Error in upsert_wallets: {e}")
+            return 0
+
+    def _merge_wallet_distributors(self, existing_wallet, new_wallet_data):
         """
-        Gets a list of transactions starting from last signature from the distributor_transfers collection
+        Merge new distributor data with existing wallet data
         """
+        merged_wallet = {
+            "wallet_address": existing_wallet["wallet_address"],
+            "distributors": existing_wallet["distributors"].copy()
+        }
 
-        # Get the last tx signature so we can start from the at point
-        last_sig = self.db.get_newest_tx_signature_for_distributor(distributor)
-        updated_sig = False
+        # Merge distributors
+        for distributor, distributor_data in new_wallet_data["distributors"].items():
+            if distributor in merged_wallet["distributors"]:
+                # Distributor exists - merge tokens
+                existing_distributor = merged_wallet["distributors"][distributor]
 
-        # Get the all of the transactions starting from the last signature by calling the distributor_transfer_generator
-        for transaction_batch in get_new_distributor_transactions(
-            distributor, last_sig
-        ):
+                if "tokens" not in existing_distributor:
+                    existing_distributor["tokens"] = {}
 
-            # Save the new sig if we haven't already
-            if not updated_sig:
-                # Update the projects last signature
-                self.db.update_newest_tx_signature_for_distributor(
-                    distributor, transaction_batch.get("last_sig")
-                )
-                updated_sig = (
-                    True  # Set to true so we don't keep updating the same value
-                )
+                # Merge tokens
+                for token, token_data in distributor_data["tokens"].items():
+                    if token in existing_distributor["tokens"]:
+                        # Token exists - add amounts
+                        existing_amount = existing_distributor["tokens"][token]["total_amount"]
+                        new_amount = token_data["total_amount"]
+                        existing_distributor["tokens"][token]["total_amount"] = existing_amount + new_amount
+                    else:
+                        # New token - add it
+                        existing_distributor["tokens"][token] = token_data.copy()
+            else:
+                # New distributor - add it
+                merged_wallet["distributors"][distributor] = distributor_data.copy()
 
-            # Extract the transfers from the transactions and insert them into the db
-            for transfer_batch in self.extract_transfers_from_distributor_transactions(
-                transaction_batch.get("txs"), distributor
-            ):
+        return merged_wallet
 
-                # Update wallets with new rewards amounts
-                self.aggregate_rewards(transfer_batch)
-
-    def extract_transfers_from_distributor_transactions(
-        self, transactions, distributor, batch_size=1000
-    ):
-        """
-        Extract transfers and insert into DB, yielding only successfully inserted transfers
-        """
-        total_docs = 0
-        total_batches = (len(transactions) + batch_size - 1) // batch_size
-
-        for i in range(0, len(transactions), batch_size):
-            batch = transactions[i : i + batch_size]
-            batch_num = (i // batch_size) + 1
-
-            # Get the transfers
-            processed_batch = process_distributor_transfers(self, batch, distributor)
-
-            # Insert into database and get what was actually inserted
-            success = self.sqlite_db.insert_temp_transfers_batch(
-                processed_batch
-            )
-
-            total_docs += len(processed_batch)
-
-            print(
-                f"Transfer Batch {batch_num}/{total_batches}. Total Docs: {total_docs}"
-            )
-
-            # Only yield the transfers that were actually inserted
-            yield inserted_docs
-
-    def aggregate_rewards(self, transfers, batch_size=1000):
-        """
-        Given a list of project transfer transactions extract each transfer from native and token transfer lists and insert it into the DB
-        """
-        total_inserted = 0
-        error_count = 0
-        total_batches = (len(transfers) + batch_size - 1) // batch_size
-
-        # Loop through each transaction and get the transfers from the native and token transfer lists
-        # then insert them into the DB
-        for i in range(0, len(transfers), batch_size):
-            batch = transfers[i : i + batch_size]
-            batch_num = (i // batch_size) + 1
-
-            aggregated_batch = aggregate_transfers(batch)
-            updated = self.db.insert_wallet_rewards(aggregated_batch)
-            total_inserted += updated
-
-    ##########################################################
-    #                          Helpers                       #
-    ##########################################################
     def get_and_add_token_metadata(self, mint_address):
         """
         Fetches token metadata, adds it to the list of known tokens in DB, and returns the symbol of the token added
@@ -144,7 +123,7 @@ class Controller:
             token_document = get_token_metadata(mint_address)
 
             # Add it to the database
-            self.db.insert_known_token(token_document)
+            self.sqlite.insert_known_token(token_document)
 
             # Update our local caches
             symbol = token_document["symbol"]
@@ -174,41 +153,3 @@ class Controller:
         self.unknown_token_cache[mint_lower] = symbol
 
         return symbol
-
-    ##########################################################
-    #                      MongoDB Getters                   #
-    ##########################################################
-    def get_db_instance(self):
-        """ Get an instance of the MongoDB and SQLiteDB """
-        try:
-            mongo = MongoDB()
-        except Exception as e:
-            raise Exception(f"There was an error when trying to initialize MongoDB")
-
-        try:
-            sqlite = SQLiteDB()
-        except Exception as e:
-            raise Exception(f"There was an error when trying to initialize SQLiteDB")
-        return mongo, sqlite
-
-    def get_supported_projects_from_db(self):
-        return self.db.get_supported_projects()
-
-    def get_known_tokens_from_db(self):
-        return self.db.get_known_tokens()
-
-    def get_transfers_with_wallet_address_and_distributor_from_db(
-        self, wallet_address, distributor
-    ):
-        return self.db.get_transfers_with_wallet_address_and_distributor(
-            wallet_address, distributor
-        )
-
-    def get_rewards_with_wallet_address_from_db(self, wallet_address):
-        return self.db.get_wallet_rewards(wallet_address)
-
-    def get_all_transfers_for_distributor_from_db(self, distributor):
-        return self.db.get_all_transfers_for_distributor(distributor)
-
-    def get_all_rewards_wallets_from_db(self):
-        return self.db.get_all_rewards_wallets()

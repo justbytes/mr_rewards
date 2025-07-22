@@ -291,6 +291,11 @@ class SQLiteDB:
             print(f"Error getting supported project with distributor {distributor}: {e}")
             raise
 
+    def get_last_tx_signature(self, distributor):
+        """ Gets the last sig for a distributor """
+        project = self.get_supported_project(distributor)
+        return project.get("last_sig")
+
     def get_supported_project_count(self):
         """
         Get the total count of supported projects
@@ -304,24 +309,15 @@ class SQLiteDB:
             print(f"Error getting supported projects count: {e}")
             raise
 
-    def update_supported_project(self, updated_project):
+    def update_last_tx_signature(self, new_sig):
         """
         Update an existing supported project by distributor
         """
         try:
             self.config_cursor.execute(
-                """UPDATE supported_projects
-                SET name = ?, token_mint = ?, dev_wallet = ?, last_sig = ?
-                WHERE distributor = ?""",
-                (
-                    updated_project.get("name"),
-                    updated_project.get("token_mint"),
-                    updated_project.get("dev_wallet", ""),
-                    updated_project.get("last_sig", ""),
-                    updated_project.get("distributor")
-                )
+                """UPDATE supported_projects last_sig = ? WHERE distributor = ?""",
+                (new_sig, distributor,)
             )
-
             self.config_connection.commit()
 
             print(f"Successfully updated supported project: {updated_project.get('name')}")
@@ -842,7 +838,7 @@ class SQLiteDB:
                 )
 
             self.temp_transfers_connection.commit()
-            # print(f"Successfully inserted {len(batch)} transfers")
+
             return True
 
         except Exception as e:
@@ -903,50 +899,195 @@ class SQLiteDB:
     ##########################################################
     #                     Wallets Functions                  #
     ##########################################################
-    def get_wallets(self):
-        pass
-
-    def get_wallet_data(self, wallet_address):
-        pass
-
-    def get_wallets_count(self):
-        pass
-
-    def insert_wallet_batch(self, wallets, batch_size=1000):
+    def get_all_wallets(self):
         """
-        Insert or update wallet information in the wallets table
+        Get all wallets from the wallets table
         """
         try:
-            for wallet in wallets_data:
-                wallet_address = wallet.get("wallet_address", "")
-                distributors = wallet.get("distributors", "")
+            self.config_cursor.execute(
+                """SELECT wallet_address, distributors
+                FROM wallets ORDER BY wallet_address"""
+            )
+            results = self.config_cursor.fetchall()
 
-                # Check if wallet already exists
-                self.config_cursor.execute(
-                    """SELECT id FROM wallets WHERE wallet_address = ?""",
-                    (wallet_address,),
-                )
-                existing = self.config_cursor.fetchone()
+            # Convert to list of dictionaries for consistency
+            wallets = []
+            for row in results:
+                wallet = {
+                    "wallet_address": row[0],
+                    "distributors": json.loads(row[1]) if row[1] else {}
+                }
+                wallets.append(wallet)
 
-                if existing:
-                    # Update existing wallet
-                    self.config_cursor.execute(
-                        """UPDATE wallets SET distributors = ? WHERE wallet_address = ?""",
-                        (distributors, wallet_address),
-                    )
-                else:
-                    # Insert new wallet
-                    self.config_cursor.execute(
-                        """INSERT INTO wallets (wallet_address, distributors) VALUES (?, ?)""",
-                        (wallet_address, distributors),
-                    )
-
-            self.config_connection.commit()
-            print(f"Successfully processed {len(wallets_data)} wallets")
+            return wallets
 
         except Exception as e:
-            print(f"Error inserting/updating wallets: {e}")
+            print(f"Error getting all wallets: {e}")
+            raise
+
+    def get_wallet(self, wallet_address):
+        """
+        Get a specific wallet by wallet address
+        """
+        try:
+            self.config_cursor.execute(
+                """SELECT wallet_address, distributors
+                FROM wallets WHERE wallet_address = ?""",
+                (wallet_address,)
+            )
+            result = self.config_cursor.fetchone()
+
+            if result:
+                wallet = {
+                    "wallet_address": result[0],
+                    "distributors": json.loads(result[1]) if result[1] else {}
+                }
+                return wallet
+            else:
+                return None
+
+        except Exception as e:
+            print(f"Error getting wallet with address {wallet_address}: {e}")
+            raise
+
+    def get_wallets_by_addresses(self, wallet_addresses):
+        """
+        Get multiple wallets by their addresses
+        """
+        if not wallet_addresses:
+            return {}
+
+        try:
+            # Create placeholders for the IN clause
+            placeholders = ','.join('?' * len(wallet_addresses))
+
+            self.config_cursor.execute(
+                f"""SELECT wallet_address, distributors
+                FROM wallets WHERE wallet_address IN ({placeholders})""",
+                wallet_addresses
+            )
+
+            results = self.config_cursor.fetchall()
+
+            # Convert to dictionary for easy lookup
+            wallets_dict = {}
+            for row in results:
+                wallet = {
+                    "wallet_address": row[0],
+                    "distributors": json.loads(row[1]) if row[1] else {}
+                }
+                wallets_dict[row[0]] = wallet
+
+            return wallets_dict
+
+        except Exception as e:
+            print(f"Error getting wallets by addresses: {e}")
+            return {}
+
+    def get_wallets_count(self):
+        """
+        Get the total count of wallets
+        """
+        try:
+            self.config_cursor.execute("SELECT COUNT(*) FROM wallets")
+            result = self.config_cursor.fetchone()
+            return result[0] if result else 0
+
+        except Exception as e:
+            print(f"Error getting wallet count: {e}")
+            raise
+
+    def insert_wallets_batch(self, wallets, batch_size=1000):
+        """
+        Insert multiple wallets in batches
+        """
+        if not wallets:
+            return True
+
+        try:
+            # Process in batches
+            for i in range(0, len(wallets), batch_size):
+                batch = wallets[i:i + batch_size]
+
+                # Prepare data for insertion
+                data_to_insert = []
+                for wallet in batch:
+                    distributors_json = json.dumps(wallet.get("distributors", {}))
+                    data_to_insert.append((
+                        wallet.get("wallet_address"),
+                        distributors_json
+                    ))
+
+                # Insert batch using INSERT OR IGNORE to handle duplicates
+                self.config_cursor.executemany(
+                    """INSERT OR IGNORE INTO wallets (wallet_address, distributors)
+                    VALUES (?, ?)""",
+                    data_to_insert
+                )
+
+            self.config_connection.commit()
+            print(f"Successfully inserted {len(wallets)} wallets")
+            return True
+
+        except Exception as e:
+            print(f"Error inserting wallet batch: {e}")
             self.config_connection.rollback()
+            return False
+
+    def update_wallets_batch(self, wallets, batch_size=1000):
+        """
+        Update multiple wallets in batches
+        """
+        if not wallets:
+            return True
+
+        try:
+            # Process in batches
+            for i in range(0, len(wallets), batch_size):
+                batch = wallets[i:i + batch_size]
+
+                # Prepare data for update
+                data_to_update = []
+                for wallet in batch:
+                    distributors_json = json.dumps(wallet.get("distributors", {}))
+                    data_to_update.append((
+                        distributors_json,
+                        wallet.get("wallet_address")
+                    ))
+
+                # Update batch
+                self.config_cursor.executemany(
+                    """UPDATE wallets SET distributors = ? WHERE wallet_address = ?""",
+                    data_to_update
+                )
+
+            self.config_connection.commit()
+            print(f"Successfully updated {len(wallets)} wallets")
+            return True
+
+        except Exception as e:
+            print(f"Error updating wallet batch: {e}")
+            self.config_connection.rollback()
+            return False
+
+    def upsert_wallet(self, wallet):
+        """
+        Insert or update a wallet (upsert operation)
+        """
+        try:
+            # Check if wallet exists
+            existing_wallet = self.get_wallet(wallet.get("wallet_address"))
+
+            if existing_wallet:
+                # Update existing wallet
+                return self.update_wallet(wallet)
+            else:
+                # Insert new wallet
+                return self.insert_wallet(wallet)
+
+        except Exception as e:
+            print(f"Error upserting wallet: {e}")
+            raise
 
     ##########################################################
     #                 Last Signature Functions               #
@@ -1019,11 +1160,11 @@ class SQLiteDB:
             connection.rollback()
             return False
 
-if __name__ == "__main__":
-    b = SQLiteDB()
+# if __name__ == "__main__":
+#     b = SQLiteDB()
 
-    success = b.get_transfers_count("BoonAKjwqfxj3Z1GtZHWeEMnoZLqgkSFEqRwhRsz4oQ")
-    print(success)
+#     success = b.get_transfers_count("BoonAKjwqfxj3Z1GtZHWeEMnoZLqgkSFEqRwhRsz4oQ")
+#     print(success)
 
 
-    b.close_connections()
+#     b.close_connections()
