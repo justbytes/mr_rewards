@@ -6,3 +6,5 @@ backup1/
 temp_backup/
 old_code/
 .DS_Store/
+run_real_tests.py
+test_backup/

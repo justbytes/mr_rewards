@@ -14,19 +14,6 @@ def temp_test_dir():
     shutil.rmtree(temp_dir)
 
 @pytest.fixture
-def mock_env_vars():
-    """Mock environment variables for testing - OPTIONAL"""
-    # This fixture is available but not used by default
-    # Use it in specific tests if you need to override env vars
-    with patch.dict('os.environ', {
-        'MONGO_URL': 'mongodb://localhost:27017/test_db',
-        'HELIUS_API_KEY': 'test_api_key',
-        'HELIUS_RPC_URL': 'https://test.helius.xyz/rpc',
-        'REDIS_URL': 'redis://localhost:6379'
-    }):
-        yield
-
-@pytest.fixture
 def load_real_env():
     """Load real environment variables from .env file"""
     from dotenv import load_dotenv

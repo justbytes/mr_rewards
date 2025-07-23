@@ -20,17 +20,27 @@ class SQLiteDB:
     of the wallet rewards data, supported projects and their most recent tx sigs, and known tokens.
     """
 
-    def __init__(self, temp=False):
+    def __init__(self, test, temp):
         """Initialize the BackupDB class by configuring DB's"""
         self.temp = temp
+        self.test = test
 
-        # Configure db collections
-        self.config_connection = sqlite3.connect(f"backup/config.db")
-        self.config_cursor = self.config_connection.cursor()
+        if test is True:
+            # Configure db collections
+            self.config_connection = sqlite3.connect(f"test_backup/config.db")
+            self.config_cursor = self.config_connection.cursor()
 
-        # This one is for the temp transfers
-        self.temp_transfers_connection = sqlite3.connect("backup/temp_transfers.db")
-        self.temp_transfers_cursor = self.temp_transfers_connection.cursor()
+            # This one is for the temp transfers
+            self.temp_transfers_connection = sqlite3.connect("test_backup/temp_transfers.db")
+            self.temp_transfers_cursor = self.temp_transfers_connection.cursor()
+        else:
+            # Configure db collections
+            self.config_connection = sqlite3.connect(f"backup/config.db")
+            self.config_cursor = self.config_connection.cursor()
+
+            # This one is for the temp transfers
+            self.temp_transfers_connection = sqlite3.connect("backup/temp_transfers.db")
+            self.temp_transfers_cursor = self.temp_transfers_connection.cursor()
 
         # Create the tables if they haven't been already
         self.create_config_tables()
@@ -165,10 +175,17 @@ class SQLiteDB:
     #                DB Connection Management                #
     ##########################################################
     def get_distributors_db(self, distributor):
-        connection = sqlite3.connect(
-            f"backup/transfers/{distributor}.db"
-        )
-        cursor = connection.cursor()
+
+        if self.test is True:
+            connection = sqlite3.connect(
+                f"test_backup/transfers/{distributor}.db"
+            )
+            cursor = connection.cursor()
+        else:
+            connection = sqlite3.connect(
+                f"backup/transfers/{distributor}.db"
+            )
+            cursor = connection.cursor()
 
         return connection, cursor
 
@@ -294,7 +311,14 @@ class SQLiteDB:
     def get_last_tx_signature(self, distributor):
         """ Gets the last sig for a distributor """
         project = self.get_supported_project(distributor)
-        return project.get("last_sig")
+
+        last_sig = project.get("last_sig")
+
+        # Empty string means none
+        if last_sig == "":
+            return None
+
+        return last_sig
 
     def get_supported_project_count(self):
         """
@@ -309,18 +333,18 @@ class SQLiteDB:
             print(f"Error getting supported projects count: {e}")
             raise
 
-    def update_last_tx_signature(self, new_sig):
+    def update_last_tx_signature(self, distributor, new_sig):
         """
         Update an existing supported project by distributor
         """
         try:
             self.config_cursor.execute(
-                """UPDATE supported_projects last_sig = ? WHERE distributor = ?""",
+                """UPDATE supported_projects SET last_sig = ? WHERE distributor = ?""",
                 (new_sig, distributor,)
             )
             self.config_connection.commit()
 
-            print(f"Successfully updated supported project: {updated_project.get('name')}")
+
             return True
 
         except Exception as e:
@@ -396,7 +420,7 @@ class SQLiteDB:
                     "mint": row[2],
                     "decimals": row[3]
                 }
-                tokens.append(project)
+                tokens.append(token)
 
             return tokens
 
@@ -559,7 +583,7 @@ class SQLiteDB:
                 # Pre-allocate list and use list comprehension for speed
                 data_to_insert = [
                     (
-                        tx.get("fee_payer", ""),
+                        tx.get("feePayer", ""),
                         tx.get("signature", ""),
                         tx.get("slot", 0),
                         tx.get("timestamp", 0),
@@ -578,13 +602,13 @@ class SQLiteDB:
                 )
 
             # Commit the entire transaction at once
-            self.distributor_connection.commit()
+            connection.commit()
             # print(f"Successfully inserted {len(batch)} temporary transactions")
             return True
 
         except Exception as e:
             print(f"Error inserting temp transactions batch: {e}")
-            self.distributor_connection.rollback()
+            connection.rollback()
             return False
 
     ##########################################################

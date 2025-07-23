@@ -1,6 +1,17 @@
+# server/lib/ProjectInitializer.py
 import time
-from ..utils.helius import get_historical_transactions_for_distributor, get_token_metadata
-from ..utils.utils import process_distributor_transfers, aggregate_transfers
+import sys
+import os
+
+# Add the server directory to the path for imports
+if hasattr(sys, '_getframe'):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    server_dir = os.path.dirname(current_dir)
+    if server_dir not in sys.path:
+        sys.path.insert(0, server_dir)
+
+from utils.helius import get_historical_transactions_for_distributor, get_token_metadata
+from utils.utils import process_distributor_transfers, aggregate_transfers
 
 class ProjectInitializer:
     """
@@ -218,22 +229,22 @@ class ProjectInitializer:
         self.project["last_sig"] = newest
         print(self.project)
         # Write the project to the local db
-        sucess = self.controller.sqlite.insert_supported_project(self.project)
+        success = self.controller.sqlite.insert_supported_project(self.project)
 
         # Make sure the insert was successful
-        if sucess is not True:
+        if success is not True:
             return False
 
         # Write the project to the mongo db
-        sucess = self.controller.sqlite.insert_supported_project(self.project)
+        success = self.controller.mongo.insert_supported_project(self.project)
 
         # Make sure the insert was successful
-        if sucess is not True:
+        if success is not True:
             return False
 
         # Next we should delete any duplicate transfers, create indexes, and drop the temp tables
         success = self.controller.sqlite.clean_and_remove_temp_data(self.distributor)
-        if sucess is not True:
+        if success is not True:
             return False
 
         return True
@@ -270,11 +281,11 @@ class ProjectInitializer:
                 wallets = aggregate_transfers(transfers)
 
                 # Use the aggregated transfers to update the wallets collection on MongoDB
-                updated = self.controller.upsert_wallets(aggregated_transfers)
+                updated = self.controller.upsert_wallets(wallets)
                 updated += updated
 
                 # Update the offset
-                self.transfers_offset = current_offset + len(aggregated_transfers)
+                self.transfers_offset = current_offset + len(transfers)
 
                 # Reset error count on successful processing
                 error_count = 0

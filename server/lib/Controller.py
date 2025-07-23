@@ -1,12 +1,23 @@
-from ..db.Mongo.db import MongoDB
-from ..db.SQLite.db import SQLiteDB
+# server/lib/Controller.py
+import sys
+import os
+
+# Add the server directory to the path for imports
+if hasattr(sys, '_getframe'):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    server_dir = os.path.dirname(current_dir)
+    if server_dir not in sys.path:
+        sys.path.insert(0, server_dir)
+
+from db.Mongo.db import MongoDB
+from db.SQLite.db import SQLiteDB
 
 class Controller:
 
-    def __init__(self):
+    def __init__(self, test, temp_dirs):
         """Initialize the FetchData class with db instance and known_tokens list"""
-        self.mongo = MongoDB()
-        self.sqlite = SQLiteDB()
+        self.mongo = MongoDB(test)
+        self.sqlite = SQLiteDB(test, temp_dirs)
 
         self.known_tokens = self.sqlite.get_known_tokens()
 

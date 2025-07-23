@@ -1,7 +1,18 @@
+# server/utils/helius.py
 import requests
 import os
-from .utils import process_distributor_transactions
+import sys
 from dotenv import load_dotenv
+
+# Add the server directory to the path for imports
+if hasattr(sys, '_getframe'):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    server_dir = os.path.dirname(current_dir)
+    if server_dir not in sys.path:
+        sys.path.insert(0, server_dir)
+
+from utils.utils import process_distributor_transactions
+
 load_dotenv()
 
 def get_historical_transactions_for_distributor(

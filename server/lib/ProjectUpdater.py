@@ -1,5 +1,16 @@
-from ..utils.utils import process_distributor_transfers, aggregate_transfers, timer
-from ..utils.helius import get_token_metadata, get_new_distributor_transactions
+# server/lib/ProjectUpdater.py
+import sys
+import os
+
+# Add the server directory to the path for imports
+if hasattr(sys, '_getframe'):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    server_dir = os.path.dirname(current_dir)
+    if server_dir not in sys.path:
+        sys.path.insert(0, server_dir)
+
+from utils.utils import process_distributor_transfers, aggregate_transfers, timer
+from utils.helius import get_token_metadata, get_new_distributor_transactions
 
 class ProjectUpdater:
 
@@ -17,20 +28,19 @@ class ProjectUpdater:
     def update_distributors_transactions(self):
         """This will loop through each supported project and get any new transfers"""
 
-        if updating is True:
+        if self.updating is True:
             return
 
         projects = self.controller.sqlite.get_supported_projects()
 
-        updating = True
+        self.updating = True
 
         for project in projects:
             distributor = project.get("distributor")
-
             self.fetch_and_process_new_distributor_transactions(distributor)
 
         print("Update complete")
-        updating = False
+        self.updating = False
 
     def fetch_and_process_new_distributor_transactions(self, distributor):
         """
@@ -39,6 +49,7 @@ class ProjectUpdater:
         try:
             # Get the last tx signature so we can start from the at point
             last_sig = self.controller.sqlite.get_last_tx_signature(distributor)
+
             updated_sig = False
 
             # Get the all of the transactions starting from the last signature by calling the distributor_transfer_generator
@@ -91,14 +102,14 @@ class ProjectUpdater:
                 if success is True:
                     total_docs += len(processed_batch)
                 else:
-                    print("Batch of temp transfers failed to insert into DB")
+                    raise Exception("Batch of temp transfers failed to insert into SQLite DB from ProjectUpdater")
 
                 print(
                     f"Transfer Batch {batch_num}/{total_batches}. Total Docs: {total_docs}"
                 )
 
                 # Only yield the transfers that were actually inserted
-                yield inserted_docs
+                yield processed_batch
         except:
             raise Exception("There was an error when extracting transfers from distributor in ProjectUpdater.")
 

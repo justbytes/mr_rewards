@@ -10,13 +10,13 @@ class MongoDB:
     This class connects to the MongoDB cluster url from the .env file. It can be used
     to query read and write projects and transactions to the database
     """
-    def __init__(self, testing=True):
+    def __init__(self, test):
         """
         Create the connection to mongodb and get the target db
         """
         self._client = MongoClient(os.getenv("MONGO_URL"), server_api=ServerApi("1"))
 
-        if testing is True:
+        if test is True:
             self._db = self._client.test_rewards_db
         else:
             self._db = self._client.rewards_db

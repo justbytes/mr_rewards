@@ -1,13 +1,20 @@
+# server/lib/BackerUpper.py
 import os
 import json
-from pathlib import Path
-from dotenv import load_dotenv
-from ..db.Mongo.db import MongoDB
-from ..db.SQLite.db import SQLiteDB
+import sys
 from datetime import datetime
 from collections import defaultdict
 
-load_dotenv()
+# Add the server directory to the path for imports
+if hasattr(sys, '_getframe'):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    server_dir = os.path.dirname(current_dir)
+    if server_dir not in sys.path:
+        sys.path.insert(0, server_dir)
+
+from db.Mongo.db import MongoDB
+from db.SQLite.db import SQLiteDB
+
 
 class BackerUpper:
     """
@@ -15,8 +22,8 @@ class BackerUpper:
     """
     def __init__(self):
         try:
-            self.sqlite = SQLiteDB(False)
-            self.mongo = MongoDB()
+            self.sqlite = SQLiteDB(True, True)
+            self.mongo = MongoDB(False)
         except Exception as e:
             print(f"There was an error when trying to initialize DB: {e}")
             raise

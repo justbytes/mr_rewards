@@ -2,7 +2,7 @@ import os
 import json
 from server.lib.BackerUpper import BackerUpper
 from server.lib.ProjectInitializer import ProjectInitializer
-from server.tests.test_controller import run_all_tests
+
 """
 This is going to be converted into a C.L.I with options to add and backup data
 """
@@ -12,7 +12,10 @@ This is going to be converted into a C.L.I with options to add and backup data
 backer_upper = BackerUpper()
 
 #Check the initial count
-#print(backer_uppessr.mongo.get_wallet_rewards("9dPHyjTpBQSTjnfh2vSCYjbHWgnR37k6mPTeRyZrMz4Q"))
+distributor = "72hnXr9PsMjp8WsnFyZjmm5vzHhTqbfouqtHBgLYdDZE"
+for txs, offset in backer_upper.sqlite.get_transactions(distributor, 0):
+    print(f"hello {offset}")
+    print(txs)
 
 def get_counts():
     transfers = backer_upper.sqlite.get_temp_transfers_count()
@@ -30,10 +33,6 @@ def get_counts():
         print(f"Transfers for {project.get("distributor")}: {count}")
 
 # get_counts()
-
-
-
-run_all_tests()
 
 
 # filepath = f"/Users/xtox/Coding/mr_rewards/temp_backup/transfers/{distributor}/2025-07-07.json"
