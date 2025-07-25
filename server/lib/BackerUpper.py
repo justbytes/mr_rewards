@@ -50,6 +50,7 @@ class BackerUpper:
             # Process each project from MongoDB
             for mongo_project in mongo_projects:
 
+                # TODO remove the current supported tokens from the table and replace them with the new
                 success = self.sqlite.upsert_supported_project(mongo_project)
 
                 if success is not True:

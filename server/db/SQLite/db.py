@@ -379,6 +379,37 @@ class SQLiteDB:
             self.config_connection.rollback()
             raise
 
+    def update_supported_project(self, project):
+        """
+        Update an existing supported project in the supported_projects table
+        """
+        try:
+            self.config_cursor.execute(
+                """UPDATE supported_projects
+                SET name = ?, token_mint = ?, dev_wallet = ?, last_sig = ?
+                WHERE distributor = ?""",
+                (
+                    project.get("name"),
+                    project.get("token_mint"),
+                    project.get("dev_wallet", ""),
+                    project.get("last_sig", ""),
+                    project.get("distributor"),
+                ),
+            )
+
+            if self.config_cursor.rowcount > 0:
+                self.config_connection.commit()
+                print(f"Successfully updated supported project: {project.get('name')}")
+                return True
+            else:
+                print(f"No project found with distributor: {project.get('distributor')}")
+                return False
+
+        except Exception as e:
+            print(f"Error updating supported project: {e}")
+            self.config_connection.rollback()
+            raise
+
     def upsert_supported_project(self, project):
         """
         Insert or update a supported project (upsert operation)
@@ -854,7 +885,7 @@ class SQLiteDB:
                     )
 
                 # Insert batch
-                self.temp_transfers_cursor_cursor.executemany(
+                self.temp_transfers_cursor.executemany(
                     """INSERT INTO transfers
                        (signature, slot, timestamp, amount, token, wallet_address, distributor)
                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
