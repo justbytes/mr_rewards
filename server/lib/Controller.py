@@ -82,8 +82,13 @@ class Controller:
                     success_count += len(update_wallets)
                     print(f"Updated {len(update_wallets)} existing wallets")
 
-            # TODO: Update MongoDB collections if needed
-            # self._update_mongodb_wallets(insert_wallets + update_wallets)
+            # Update mongo dbs wallet collection for the api
+            wallet_list = [
+                {"wallet_address": wallet_address, "distributors": wallet_data["distributors"]}
+                for wallet_address, wallet_data in wallets.items()
+            ]
+            self.mongo.insert_wallets_batch(wallet_list)
+
 
             return success_count
 

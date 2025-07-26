@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Interactive Test Runner
-Provides a menu to run SQLite tests, MongoDB tests, or both.
+Provides a menu to run SQLite tests, MongoDB tests, Controller tests, or all tests.
 """
 
 import sys
@@ -56,7 +56,7 @@ def run_mongodb_tests():
 
     if not test_file.exists():
         print(f"❌ Test file not found: {test_file}")
-        print("💡 Make sure you've created the test_mongodb.py file in the tests directory")
+        print("💡 Make sure you've created the test_mongo.py file in the tests directory")
         return False
 
     try:
@@ -71,9 +71,36 @@ def run_mongodb_tests():
         print(f"❌ Error running MongoDB tests: {e}")
         return False
 
-def run_all_tests():
-    """Run both SQLite and MongoDB tests"""
-    print("🧪 Running ALL tests...")
+def run_controller_tests():
+    """Run the Controller integration tests"""
+    print("🧪 Running Controller integration tests...")
+
+    # Setup paths
+    setup_python_path()
+
+    # Check if test file exists
+    test_file = TESTS_DIR / "test_controller.py"
+
+    if not test_file.exists():
+        print(f"❌ Test file not found: {test_file}")
+        print("💡 Make sure you've created the test_controller.py file in the tests directory")
+        return False
+
+    try:
+        # Run pytest on the specific test file
+        cmd = [sys.executable, "-m", "pytest", str(test_file), "-v"]
+        print(f"Running: {' '.join(cmd)}")
+
+        result = subprocess.run(cmd, cwd=PROJECT_ROOT)
+        return result.returncode == 0
+
+    except Exception as e:
+        print(f"❌ Error running Controller tests: {e}")
+        return False
+
+def run_database_tests():
+    """Run both SQLite and MongoDB tests (database layer only)"""
+    print("🧪 Running DATABASE tests (SQLite + MongoDB)...")
     print("=" * 50)
 
     sqlite_success = False
@@ -93,11 +120,49 @@ def run_all_tests():
 
     # Summary
     print("\n" + "=" * 50)
-    print("📋 TEST SUMMARY:")
+    print("📋 DATABASE TESTS SUMMARY:")
     print(f"   SQLite Tests:  {'✅ PASSED' if sqlite_success else '❌ FAILED'}")
     print(f"   MongoDB Tests: {'✅ PASSED' if mongodb_success else '❌ FAILED'}")
 
     return sqlite_success and mongodb_success
+
+def run_all_tests():
+    """Run all tests: SQLite, MongoDB, and Controller"""
+    print("🧪 Running ALL tests...")
+    print("=" * 50)
+
+    sqlite_success = False
+    mongodb_success = False
+    controller_success = False
+
+    # Run SQLite tests first
+    print("\n📊 Part 1: SQLite Tests")
+    print("-" * 30)
+    sqlite_success = run_sqlite_tests()
+
+    print("\n" + "=" * 50)
+
+    # Run MongoDB tests
+    print("\n📊 Part 2: MongoDB Tests")
+    print("-" * 30)
+    mongodb_success = run_mongodb_tests()
+
+    print("\n" + "=" * 50)
+
+    # Run Controller tests
+    print("\n📊 Part 3: Controller Integration Tests")
+    print("-" * 30)
+    controller_success = run_controller_tests()
+
+    # Summary
+    print("\n" + "=" * 50)
+    print("📋 COMPLETE TEST SUMMARY:")
+    print(f"   SQLite Tests:    {'✅ PASSED' if sqlite_success else '❌ FAILED'}")
+    print(f"   MongoDB Tests:   {'✅ PASSED' if mongodb_success else '❌ FAILED'}")
+    print(f"   Controller Tests: {'✅ PASSED' if controller_success else '❌ FAILED'}")
+    print(f"   Overall Result:  {'✅ ALL PASSED' if all([sqlite_success, mongodb_success, controller_success]) else '❌ SOME FAILED'}")
+
+    return sqlite_success and mongodb_success and controller_success
 
 def show_menu():
     """Display the interactive menu"""
@@ -107,19 +172,21 @@ def show_menu():
     print()
     print("1. 🗃️  SQLite Tests Only")
     print("2. 🍃  MongoDB Tests Only")
-    print("3. 🚀  Run All Tests")
-    print("4. ❌  Exit")
+    print("3. 🎛️  Controller Tests Only")
+    print("4. 🔗  Database Tests (SQLite + MongoDB)")
+    print("5. 🚀  Run All Tests (Complete Suite)")
+    print("6. ❌  Exit")
     print()
 
 def get_user_choice():
     """Get and validate user choice"""
     while True:
         try:
-            choice = input("Enter your choice (1-4): ").strip()
-            if choice in ['1', '2', '3', '4']:
+            choice = input("Enter your choice (1-6): ").strip()
+            if choice in ['1', '2', '3', '4', '5', '6']:
                 return int(choice)
             else:
-                print("❌ Invalid choice. Please enter 1, 2, 3, or 4.")
+                print("❌ Invalid choice. Please enter 1, 2, 3, 4, 5, or 6.")
         except KeyboardInterrupt:
             print("\n\n👋 Goodbye!")
             sys.exit(0)
@@ -135,10 +202,47 @@ def show_troubleshooting():
     print("   - Ensure you have pytest installed: pip install pytest")
     print("   - For MongoDB tests: check your MongoDB connection and .env file")
     print("   - For SQLite tests: verify file permissions in the project directory")
+    print("   - For Controller tests: ensure both SQLite and MongoDB are working")
+    print("   - For integration tests: check that temp directories can be created")
+
+def show_test_descriptions():
+    """Show what each test type covers"""
+    print("\n📖 Test Descriptions:")
+    print("=" * 40)
+    print("🗃️  SQLite Tests:")
+    print("   - Database operations (CRUD)")
+    print("   - Table creation and indexing")
+    print("   - Transaction handling")
+    print("   - Wallet and token management")
+    print()
+    print("🍃  MongoDB Tests:")
+    print("   - Document insertion and updates")
+    print("   - Batch operations")
+    print("   - Collection management")
+    print("   - API data synchronization")
+    print()
+    print("🎛️  Controller Tests:")
+    print("   - Integration between SQLite and MongoDB")
+    print("   - Wallet upsert operations")
+    print("   - Token symbol management")
+    print("   - Data consistency verification")
+    print("   - Error handling and edge cases")
+    print()
+    print("🔗  Database Tests:")
+    print("   - Runs both SQLite and MongoDB tests")
+    print("   - Focuses on database layer functionality")
+    print()
+    print("🚀  All Tests:")
+    print("   - Complete test suite")
+    print("   - Database + Integration layers")
+    print("   - Full system verification")
 
 def main():
     """Main function with interactive menu"""
     success = True
+
+    # Show test descriptions on startup
+    show_test_descriptions()
 
     while True:
         show_menu()
@@ -157,11 +261,21 @@ def main():
             success = run_mongodb_tests()
 
         elif choice == 3:
-            print("🚀  Starting All Tests...")
+            print("🎛️  Starting Controller Integration Tests...")
+            print("=" * 40)
+            success = run_controller_tests()
+
+        elif choice == 4:
+            print("🔗  Starting Database Tests...")
+            print("=" * 40)
+            success = run_database_tests()
+
+        elif choice == 5:
+            print("🚀  Starting Complete Test Suite...")
             print("=" * 40)
             success = run_all_tests()
 
-        elif choice == 4:
+        elif choice == 6:
             print("👋 Goodbye!")
             break
 
