@@ -2,6 +2,8 @@ import pytest
 import sys
 import json
 import time
+import shutil
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -20,8 +22,77 @@ from .mock_data import TRANSACTIONS, PROJECT, WALLET, KNOWN_TOKENS
 
 class TestSQLite:
     def setup_method(self):
+        """Setup method run before each test"""
+        # Clean up test data BEFORE creating SQLiteDB instance
+        self.cleanup_test_data()
+
+        # Ensure test directories exist with correct permissions
+        self.ensure_test_directories()
+
+        # Now create the SQLiteDB instance
         self.sqlite = SQLiteDB(True, True)
 
+    def teardown_method(self):
+        """Cleanup method run after each test"""
+        # Close connections before cleanup
+        try:
+            self.sqlite.close_connections()
+        except:
+            pass
+
+        # Clean up test data after each test
+        self.cleanup_test_data()
+
+    def ensure_test_directories(self):
+        """Ensure test directories exist with correct permissions"""
+        try:
+            test_backup_path = Path("test_backup")
+            transfers_path = test_backup_path / "transfers"
+
+            # Create directories if they don't exist
+            test_backup_path.mkdir(exist_ok=True)
+            transfers_path.mkdir(exist_ok=True)
+
+            # Set correct permissions (readable and writable)
+            os.chmod(test_backup_path, 0o755)
+            os.chmod(transfers_path, 0o755)
+
+            print("Test directories created with correct permissions")
+
+        except Exception as e:
+            print(f"Error creating test directories: {e}")
+
+    def cleanup_test_data(self):
+        """Remove all test data from test_backup directory but keep transfers directory structure"""
+        try:
+            test_backup_path = Path("test_backup")
+
+            if test_backup_path.exists():
+                # Get all items in test_backup directory
+                for item in test_backup_path.iterdir():
+                    # Skip the transfers directory but clean its contents
+                    if item.is_dir() and item.name == "transfers":
+                        # Clean contents of transfers directory but keep the directory
+                        for transfer_file in item.iterdir():
+                            if transfer_file.is_file():
+                                transfer_file.unlink()
+                                print(f"Removed transfer file: {transfer_file}")
+                        continue
+
+                    # Remove files and other directories
+                    if item.is_file():
+                        item.unlink()
+                        print(f"Removed file: {item}")
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+                        print(f"Removed directory: {item}")
+
+                print("SQLite test data cleaned up (transfers directory preserved)")
+            else:
+                print("test_backup directory does not exist, nothing to clean")
+
+        except Exception as e:
+            print(f"Error cleaning up SQLite test data: {e}")
 
     ##########################################################
     #                 Supported Projects Tests               #
@@ -32,7 +103,7 @@ class TestSQLite:
         assert result is True
 
         result = self.sqlite.get_supported_project(PROJECT["distributor"])
-        result.get("token_mint") == PROJECT["token_mint"]
+        assert result.get("token_mint") == PROJECT["token_mint"]
         print(f"✅ SQLite inserts a supported project!")
 
     def test_sqlite_does_not_create_duplicate_supported_projects(self):
@@ -40,12 +111,20 @@ class TestSQLite:
         result = self.sqlite.insert_supported_project(PROJECT)
         assert result is True
 
+        # Insert again - should be ignored due to INSERT OR IGNORE
+        result = self.sqlite.insert_supported_project(PROJECT)
+        assert result is True
+
         # Get the count
         result = self.sqlite.get_supported_project_count()
-        assert result is 1
+        assert result == 1
         print(f"✅ SQLite doesn't create duplicate supported projects!")
 
     def test_sqlite_updates_supported_project_last_sig_field(self):
+        # First insert a project
+        result = self.sqlite.insert_supported_project(PROJECT)
+        assert result is True
+
         result = self.sqlite.get_last_tx_signature(PROJECT["distributor"])
         assert result is None
 
@@ -95,13 +174,17 @@ class TestSQLite:
         print(f"✅ SQLite inserts known tokens!")
 
     def test_sqlite_does_not_create_duplicate_known_tokens(self):
-        # Try to add the same project which shouldn't be allowed
+        # Try to add the same token which shouldn't be allowed
+        result = self.sqlite.insert_known_token(KNOWN_TOKENS)
+        assert result is True
+
+        # Insert again - should be skipped
         result = self.sqlite.insert_known_token(KNOWN_TOKENS)
         assert result is True
 
         # Get the count
         result = self.sqlite.get_known_tokens_count()
-        assert result is 1
+        assert result == 1
         print(f"✅ SQLite doesn't create duplicate known tokens!")
 
     def test_sqlite_gets_all_known_tokens(self):

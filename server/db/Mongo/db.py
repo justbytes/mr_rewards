@@ -1,6 +1,7 @@
 import os
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+from pymongo.errors import DuplicateKeyError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -123,4 +124,103 @@ class MongoDB:
             return None
 
     def insert_wallets_batch(self, wallets, batch_size=5000):
-        pass
+        """
+        Insert or update wallets in batches. If a wallet exists, it will be replaced.
+        If it doesn't exist, it will be inserted.
+
+        Args:
+            wallets: List of wallet dictionaries to insert/update
+            batch_size: Number of documents to process in each batch (default: 5000)
+
+        Returns:
+            dict: Summary of the operation with counts of inserted, updated, and failed documents
+        """
+        try:
+            collection = self._db.wallets
+
+            # Initialize counters
+            total_processed = 0
+            total_inserted = 0
+            total_updated = 0
+            total_failed = 0
+
+            # Process wallets in batches
+            for i in range(0, len(wallets), batch_size):
+                batch = wallets[i:i + batch_size]
+                batch_operations = []
+
+                # Prepare bulk operations for this batch
+                for wallet in batch:
+                    try:
+                        # Ensure wallet has required fields
+                        if not wallet.get('wallet_address'):
+                            print(f"Skipping wallet without wallet_address: {wallet}")
+                            total_failed += 1
+                            continue
+
+                        # Create the document structure
+                        document = {
+                            "wallet_address": wallet["wallet_address"],
+                            "distributors": wallet.get("distributors", {})
+                        }
+
+                        # Add _id if provided (for updates)
+                        if "_id" in wallet:
+                            document["_id"] = wallet["_id"]
+
+                        # Create upsert operation - FIXED: Use ReplaceOne class instead of dict
+                        from pymongo import ReplaceOne
+                        operation = ReplaceOne(
+                            {"wallet_address": wallet["wallet_address"]},
+                            document,
+                            upsert=True
+                        )
+
+                        batch_operations.append(operation)
+
+                    except Exception as e:
+                        print(f"Error preparing wallet operation: {e}")
+                        total_failed += 1
+                        continue
+
+                # Execute batch operations if we have any
+                if batch_operations:
+                    try:
+                        result = collection.bulk_write(batch_operations, ordered=False)
+
+                        # Update counters based on bulk write result
+                        total_inserted += result.upserted_count
+                        total_updated += result.modified_count
+                        total_processed += len(batch_operations)
+
+                        print(f"Processed batch {i//batch_size + 1}: "
+                            f"{len(batch_operations)} operations, "
+                            f"{result.upserted_count} inserted, "
+                            f"{result.modified_count} updated")
+
+                    except Exception as e:
+                        print(f"Error executing batch operations: {e}")
+                        total_failed += len(batch_operations)
+
+            # Return summary
+            result_summary = {
+                "total_processed": total_processed,
+                "total_inserted": total_inserted,
+                "total_updated": total_updated,
+                "total_failed": total_failed,
+                "success": total_failed == 0
+            }
+
+            print(f"Batch operation completed: {result_summary}")
+            return result_summary
+
+        except Exception as e:
+            print(f"Error in insert_wallets_batch: {e}")
+            return {
+                "total_processed": 0,
+                "total_inserted": 0,
+                "total_updated": 0,
+                "total_failed": len(wallets),
+                "success": False,
+                "error": str(e)
+            }
