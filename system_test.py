@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Interactive Test Runner
-Provides a menu to run SQLite tests, MongoDB tests, Controller tests, ProjectUpdater tests, or all tests.
+Provides a menu to run SQLite tests, MongoDB tests, Controller tests, ProjectUpdater tests, ProjectInitializer tests, or all tests.
 """
 
 import sys
@@ -125,6 +125,33 @@ def run_project_updater_tests():
         print(f"❌ Error running ProjectUpdater tests: {e}")
         return False
 
+def run_project_initializer_tests():
+    """Run the ProjectInitializer tests"""
+    print("🧪 Running ProjectInitializer tests...")
+
+    # Setup paths
+    setup_python_path()
+
+    # Check if test file exists
+    test_file = TESTS_DIR / "test_project_initializer.py"
+
+    if not test_file.exists():
+        print(f"❌ Test file not found: {test_file}")
+        print("💡 Make sure you've created the test_project_initializer.py file in the tests directory")
+        return False
+
+    try:
+        # Run pytest on the specific test file
+        cmd = [sys.executable, "-m", "pytest", str(test_file), "-v"]
+        print(f"Running: {' '.join(cmd)}")
+
+        result = subprocess.run(cmd, cwd=PROJECT_ROOT)
+        return result.returncode == 0
+
+    except Exception as e:
+        print(f"❌ Error running ProjectInitializer tests: {e}")
+        return False
+
 def run_database_tests():
     """Run both SQLite and MongoDB tests (database layer only)"""
     print("🧪 Running DATABASE tests (SQLite + MongoDB)...")
@@ -153,8 +180,45 @@ def run_database_tests():
 
     return sqlite_success and mongodb_success
 
+def run_business_logic_tests():
+    """Run Controller, ProjectUpdater, and ProjectInitializer tests"""
+    print("🧪 Running BUSINESS LOGIC tests (Controller + ProjectUpdater + ProjectInitializer)...")
+    print("=" * 50)
+
+    controller_success = False
+    project_updater_success = False
+    project_initializer_success = False
+
+    # Run Controller tests first
+    print("\n📊 Part 1: Controller Integration Tests")
+    print("-" * 30)
+    controller_success = run_controller_tests()
+
+    print("\n" + "=" * 50)
+
+    # Run ProjectUpdater tests
+    print("\n📊 Part 2: ProjectUpdater Tests")
+    print("-" * 30)
+    project_updater_success = run_project_updater_tests()
+
+    print("\n" + "=" * 50)
+
+    # Run ProjectInitializer tests
+    print("\n📊 Part 3: ProjectInitializer Tests")
+    print("-" * 30)
+    project_initializer_success = run_project_initializer_tests()
+
+    # Summary
+    print("\n" + "=" * 50)
+    print("📋 BUSINESS LOGIC TESTS SUMMARY:")
+    print(f"   Controller Tests:         {'✅ PASSED' if controller_success else '❌ FAILED'}")
+    print(f"   ProjectUpdater Tests:     {'✅ PASSED' if project_updater_success else '❌ FAILED'}")
+    print(f"   ProjectInitializer Tests: {'✅ PASSED' if project_initializer_success else '❌ FAILED'}")
+
+    return controller_success and project_updater_success and project_initializer_success
+
 def run_integration_tests():
-    """Run both Controller and ProjectUpdater integration tests"""
+    """Run both Controller and ProjectUpdater integration tests (legacy function for backwards compatibility)"""
     print("🧪 Running INTEGRATION tests (Controller + ProjectUpdater)...")
     print("=" * 50)
 
@@ -182,7 +246,7 @@ def run_integration_tests():
     return controller_success and project_updater_success
 
 def run_all_tests():
-    """Run all tests: SQLite, MongoDB, Controller, and ProjectUpdater"""
+    """Run all tests: SQLite, MongoDB, Controller, ProjectUpdater, and ProjectInitializer"""
     print("🧪 Running ALL tests...")
     print("=" * 50)
 
@@ -190,6 +254,7 @@ def run_all_tests():
     mongodb_success = False
     controller_success = False
     project_updater_success = False
+    project_initializer_success = False
 
     # Run SQLite tests first
     print("\n📊 Part 1: SQLite Tests")
@@ -217,16 +282,24 @@ def run_all_tests():
     print("-" * 30)
     project_updater_success = run_project_updater_tests()
 
+    print("\n" + "=" * 50)
+
+    # Run ProjectInitializer tests
+    print("\n📊 Part 5: ProjectInitializer Tests")
+    print("-" * 30)
+    project_initializer_success = run_project_initializer_tests()
+
     # Summary
     print("\n" + "=" * 50)
     print("📋 COMPLETE TEST SUMMARY:")
-    print(f"   SQLite Tests:         {'✅ PASSED' if sqlite_success else '❌ FAILED'}")
-    print(f"   MongoDB Tests:        {'✅ PASSED' if mongodb_success else '❌ FAILED'}")
-    print(f"   Controller Tests:     {'✅ PASSED' if controller_success else '❌ FAILED'}")
-    print(f"   ProjectUpdater Tests: {'✅ PASSED' if project_updater_success else '❌ FAILED'}")
-    print(f"   Overall Result:       {'✅ ALL PASSED' if all([sqlite_success, mongodb_success, controller_success, project_updater_success]) else '❌ SOME FAILED'}")
+    print(f"   SQLite Tests:             {'✅ PASSED' if sqlite_success else '❌ FAILED'}")
+    print(f"   MongoDB Tests:            {'✅ PASSED' if mongodb_success else '❌ FAILED'}")
+    print(f"   Controller Tests:         {'✅ PASSED' if controller_success else '❌ FAILED'}")
+    print(f"   ProjectUpdater Tests:     {'✅ PASSED' if project_updater_success else '❌ FAILED'}")
+    print(f"   ProjectInitializer Tests: {'✅ PASSED' if project_initializer_success else '❌ FAILED'}")
+    print(f"   Overall Result:           {'✅ ALL PASSED' if all([sqlite_success, mongodb_success, controller_success, project_updater_success, project_initializer_success]) else '❌ SOME FAILED'}")
 
-    return sqlite_success and mongodb_success and controller_success and project_updater_success
+    return sqlite_success and mongodb_success and controller_success and project_updater_success and project_initializer_success
 
 def show_menu():
     """Display the interactive menu"""
@@ -238,21 +311,23 @@ def show_menu():
     print("2. 🍃  MongoDB Tests Only")
     print("3. 🎛️  Controller Tests Only")
     print("4. 🔄  ProjectUpdater Tests Only")
-    print("5. 🔗  Database Tests (SQLite + MongoDB)")
-    print("6. 🏗️  Integration Tests (Controller + ProjectUpdater)")
-    print("7. 🚀  Run All Tests (Complete Suite)")
-    print("8. ❌  Exit")
+    print("5. 🏗️  ProjectInitializer Tests Only")
+    print("6. 🔗  Database Tests (SQLite + MongoDB)")
+    print("7. 🧠  Business Logic Tests (Controller + ProjectUpdater + ProjectInitializer)")
+    print("8. 🏭  Integration Tests (Controller + ProjectUpdater)")
+    print("9. 🚀  Run All Tests (Complete Suite)")
+    print("10. ❌  Exit")
     print()
 
 def get_user_choice():
     """Get and validate user choice"""
     while True:
         try:
-            choice = input("Enter your choice (1-8): ").strip()
-            if choice in ['1', '2', '3', '4', '5', '6', '7', '8']:
+            choice = input("Enter your choice (1-10): ").strip()
+            if choice in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']:
                 return int(choice)
             else:
-                print("❌ Invalid choice. Please enter 1, 2, 3, 4, 5, 6, 7, or 8.")
+                print("❌ Invalid choice. Please enter 1-10.")
         except KeyboardInterrupt:
             print("\n\n👋 Goodbye!")
             sys.exit(0)
@@ -270,8 +345,10 @@ def show_troubleshooting():
     print("   - For SQLite tests: verify file permissions in the project directory")
     print("   - For Controller tests: ensure both SQLite and MongoDB are working")
     print("   - For ProjectUpdater tests: check that Controller tests pass first")
+    print("   - For ProjectInitializer tests: check that Controller tests pass first")
     print("   - For integration tests: check that temp directories can be created")
     print("   - For ProjectUpdater: verify utils modules can be imported properly")
+    print("   - For ProjectInitializer: ensure external API mocking works correctly")
 
 def show_test_descriptions():
     """Show what each test type covers"""
@@ -304,18 +381,32 @@ def show_test_descriptions():
     print("   - External API integration (mocked)")
     print("   - Concurrent update prevention")
     print()
+    print("🏗️  ProjectInitializer Tests:")
+    print("   - New project initialization workflows")
+    print("   - Historical transaction fetching")
+    print("   - Large-scale data processing")
+    print("   - Database setup and cleanup")
+    print("   - End-to-end project setup")
+    print("   - Error recovery and resume capability")
+    print("   - Memory management with large datasets")
+    print()
     print("🔗  Database Tests:")
     print("   - Runs both SQLite and MongoDB tests")
     print("   - Focuses on database layer functionality")
     print()
-    print("🏗️  Integration Tests:")
-    print("   - Runs both Controller and ProjectUpdater tests")
+    print("🧠  Business Logic Tests:")
+    print("   - Runs Controller, ProjectUpdater, and ProjectInitializer tests")
+    print("   - Tests all business logic components")
+    print("   - Validates complete business workflows")
+    print()
+    print("🏭  Integration Tests:")
+    print("   - Runs Controller and ProjectUpdater tests")
     print("   - Tests inter-component communication")
-    print("   - Validates complete workflows")
+    print("   - Validates ongoing operation workflows")
     print()
     print("🚀  All Tests:")
     print("   - Complete test suite")
-    print("   - Database + Integration + Business Logic layers")
+    print("   - Database + Business Logic + Integration layers")
     print("   - Full system verification")
 
 def main():
@@ -352,21 +443,31 @@ def main():
             success = run_project_updater_tests()
 
         elif choice == 5:
+            print("🏗️  Starting ProjectInitializer Tests...")
+            print("=" * 40)
+            success = run_project_initializer_tests()
+
+        elif choice == 6:
             print("🔗  Starting Database Tests...")
             print("=" * 40)
             success = run_database_tests()
 
-        elif choice == 6:
-            print("🏗️  Starting Integration Tests...")
+        elif choice == 7:
+            print("🧠  Starting Business Logic Tests...")
+            print("=" * 40)
+            success = run_business_logic_tests()
+
+        elif choice == 8:
+            print("🏭  Starting Integration Tests...")
             print("=" * 40)
             success = run_integration_tests()
 
-        elif choice == 7:
+        elif choice == 9:
             print("🚀  Starting Complete Test Suite...")
             print("=" * 40)
             success = run_all_tests()
 
-        elif choice == 8:
+        elif choice == 10:
             print("👋 Goodbye!")
             break
 
