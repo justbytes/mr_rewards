@@ -586,11 +586,6 @@ class TestController:
             }
         }
 
-        # The issue is in Controller.upsert_wallets method:
-        # It calls: self.mongo.insert_wallets_batch(wallets)
-        # But 'wallets' is a dictionary like: {"wallet_addr": {"distributors": {...}}}
-        # MongoDB expects a list like: [{"wallet_address": "addr", "distributors": {...}}]
-
         # Test the direct MongoDB call with correct format
         correct_format = [
             {
