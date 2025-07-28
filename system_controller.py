@@ -21,10 +21,6 @@ def setup_python_path():
     sys.path.insert(0, str(PROJECT_ROOT))
     sys.path.insert(0, str(SERVER_DIR))
 
-##########################################################
-#              Backup Data To Local Storage              #
-##########################################################
-
 def get_sqlite_counts():
     """Get and display SQLite database counts"""
     print("📊 Getting SQLite database counts...")
@@ -58,10 +54,6 @@ def get_sqlite_counts():
     except Exception as e:
         print(f"❌ Error getting SQLite counts: {e}")
         return False
-
-##########################################################
-#                 Initialize New Projects                #
-##########################################################
 
 def get_user_input(prompt, required=True, default=None):
     """Get user input with optional validation"""
@@ -151,7 +143,6 @@ def initialize_project():
         print(f"❌ Error initializing project: {e}")
         return False
 
-# Test functions from original system_test.py
 def run_sqlite_tests():
     """Run the SQLite tests"""
     print("🧪 Running SQLite tests...")

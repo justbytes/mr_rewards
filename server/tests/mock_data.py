@@ -1,3 +1,70 @@
+import secrets
+import string
+
+def generate_test_api_key(prefix: str = "sk_test_", length: int = 48) -> str:
+    """
+    Generate a test API key for testing purposes
+
+    Args:
+        prefix: Prefix for the API key
+        length: Total length of the random part
+
+    Returns:
+        str: Generated test API key
+    """
+    # Generate random string
+    alphabet = string.ascii_lowercase + string.ascii_uppercase + string.digits
+    random_part = ''.join(secrets.choice(alphabet) for _ in range(length))
+
+    return f"{prefix}{random_part}"
+
+# Sample API key test data
+SAMPLE_API_KEYS = [
+    {
+        "key": "sk_test_1234567890abcdef1234567890abcdef1234567890abcdef12",
+        "name": "Test Client 1",
+        "rate_limit": 1000,
+        "is_active": True
+    },
+    {
+        "key": "sk_test_abcdef1234567890abcdef1234567890abcdef1234567890ab",
+        "name": "Test Client 2",
+        "rate_limit": 2000,
+        "is_active": True
+    },
+    {
+        "key": "sk_test_9876543210fedcba9876543210fedcba9876543210fedcba98",
+        "name": "Inactive Client",
+        "rate_limit": 500,
+        "is_active": False
+    }
+]
+
+# Sample usage log data
+SAMPLE_USAGE_LOGS = [
+    {
+        "api_key": "sk_test_1234567890abcdef1234567890abcdef1234567890abcdef12",
+        "endpoint": "/supported_projects",
+        "method": "GET",
+        "user_agent": "Mozilla/5.0 (Test Browser)",
+        "ip_address": "192.168.1.100"
+    },
+    {
+        "api_key": "sk_test_1234567890abcdef1234567890abcdef1234567890abcdef12",
+        "endpoint": "/rewards/wallet123",
+        "method": "GET",
+        "user_agent": "PostmanRuntime/7.26.8",
+        "ip_address": "192.168.1.101"
+    },
+    {
+        "api_key": "sk_test_abcdef1234567890abcdef1234567890abcdef1234567890ab",
+        "endpoint": "/supported_projects",
+        "method": "GET",
+        "user_agent": "curl/7.68.0",
+        "ip_address": "10.0.0.5"
+    }
+]
+
 PROJECT = {
     "name": "Revs",
     "distributor": "72hnXr9PsMjp8WsnFyZjmm5vzHhTqbfouqtHBgLYdDZE",

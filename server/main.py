@@ -1,3 +1,4 @@
+# server/main.py
 import uvicorn
 from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
@@ -10,25 +11,25 @@ from lib.Controller import Controller
 from limiter import limiter
 from routes.dependency import set_controller, remove_controller
 
-# Initialize the connection to the MongoDB and asign it the global variable
+# Initialize the connection to the database and assign it the global variable
 def initialize_program():
     """Initialize the global database connection"""
     try:
-        # Get and instance of the Controller which is used to read from DB
+        # Get an instance of the Controller which is used to read from DB
         controller = Controller()
         controller.begin_polling()
 
         # Add controller to dependencies
         set_controller(controller)
     except Exception as e:
-        raise Exception(f"An error has occured when initializing the contoller {e}")
+        raise Exception(f"An error has occurred when initializing the controller {e}")
 
 # Lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting up the API...")
 
-    # Initialize the controller and telegram bot
+    # Initialize the controller
     initialize_program()
 
     yield
@@ -40,7 +41,7 @@ async def lifespan(app: FastAPI):
 # Initialize the app
 app = FastAPI(
     title="Mr. Rewards | Solana Rewards Token Tracker",
-    description="API to retrieve aggregated rewards received from rewards token projects",
+    description="API to retrieve aggregated rewards received from rewards token projects. Authentication required for most endpoints.",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -57,15 +58,15 @@ app.include_router(system_config.router, tags=["system"])
 @app.get("/", response_model=RootResponse)
 @limiter.limit("30/minute")
 async def root(request: Request):
-    """Root endpoint with API information"""
+    """Root endpoint with API information (public - no authentication required)"""
     return {
         "message": "Wallet Rewards API",
         "version": "1.0.0",
         "endpoints": {
-            "status": "/health",
-            "supported_projects": "/supported_projects",
-            "wallet_rewards": "/rewards/{wallet_address}",
-            "docs": "/docs",
+            "status": "/health (public)",
+            "supported_projects": "/supported_projects (requires Bearer token)",
+            "wallet_rewards": "/rewards/{wallet_address} (requires Bearer token)",
+            "docs": "/docs (public)",
         },
     }
 

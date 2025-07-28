@@ -1,3 +1,4 @@
+# server/db/SQLite/schemas.py
 temp_transactions = """
 CREATE TABLE IF NOT EXISTS temp_transactions(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,5 +63,31 @@ CREATE TABLE IF NOT EXISTS known_tokens(
     mint TEXT,
     decimals TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+api_keys = """
+CREATE TABLE IF NOT EXISTS api_keys(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT UNIQUE NOT NULL,
+    name TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    last_used TEXT,
+    usage_count INTEGER DEFAULT 0,
+    rate_limit INTEGER
+)
+"""
+
+api_usage_logs = """
+CREATE TABLE IF NOT EXISTS api_usage_logs(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    api_key TEXT NOT NULL,
+    endpoint TEXT,
+    method TEXT,
+    user_agent TEXT,
+    ip_address TEXT,
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (api_key) REFERENCES api_keys(key)
 )
 """

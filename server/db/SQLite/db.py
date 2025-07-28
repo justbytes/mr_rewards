@@ -1,8 +1,11 @@
+# server/db/SQLite/db.py
 import os
 import sqlite3
 import json
 from dotenv import load_dotenv
 from .schemas import (
+    api_keys,
+    api_usage_logs,
     temp_transactions,
     temp_txs_last_sigs,
     transfers,
@@ -53,11 +56,16 @@ class SQLiteDB:
     ##########################################################
     #                         DB Tables                      #
     ##########################################################
+
     def create_config_tables(self):
         """Creates the tables for the dbs"""
         self.config_cursor.execute(wallets)
         self.config_cursor.execute(supported_projects)
         self.config_cursor.execute(known_tokens)
+
+        # Add API key tables
+        self.config_cursor.execute(api_keys)
+        self.config_cursor.execute(api_usage_logs)
 
         # Temp transfers db
         self.temp_transfers_cursor.execute(transfers)
@@ -108,7 +116,17 @@ class SQLiteDB:
 
                 # Known tokens table indexes
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_known_tokens_mint ON known_tokens(mint)",
+
+                # API keys table indexes
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key)",
+                "CREATE INDEX IF NOT EXISTS idx_api_keys_is_active ON api_keys(is_active)",
+                "CREATE INDEX IF NOT EXISTS idx_api_keys_last_used ON api_keys(last_used)",
+
+                # API usage logs indexes
+                "CREATE INDEX IF NOT EXISTS idx_api_usage_logs_api_key ON api_usage_logs(api_key)",
+                "CREATE INDEX IF NOT EXISTS idx_api_usage_logs_timestamp ON api_usage_logs(timestamp)",
             ]
+
             transfers_indexes = [
                 "CREATE INDEX IF NOT EXISTS idx_transfers_wallet_distributor ON transfers(wallet_address, distributor)",
                 "CREATE INDEX IF NOT EXISTS idx_transfers_signature ON transfers(signature)",
@@ -1214,6 +1232,296 @@ class SQLiteDB:
             print(f"Error updating temp_txs last signature: {e}")
             connection.rollback()
             return False
+
+    ##########################################################
+    #                  API Keys Functions                    #
+    ##########################################################
+
+    def validate_api_key(self, api_key: str) -> bool:
+        """
+        Validate API key against database
+
+        Args:
+            api_key: The API key to validate
+
+        Returns:
+            bool: True if valid and active, False otherwise
+        """
+        try:
+            self.config_cursor.execute(
+                """SELECT id FROM api_keys
+                WHERE key = ? AND is_active = 1""",
+                (api_key,)
+            )
+            result = self.config_cursor.fetchone()
+            return result is not None
+
+        except Exception as e:
+            print(f"Error validating API key: {e}")
+            return False
+
+    def get_api_key(self, api_key: str):
+        """
+        Get API key details from database
+
+        Args:
+            api_key: The API key to retrieve
+
+        Returns:
+            dict: API key details or None if not found
+        """
+        try:
+            self.config_cursor.execute(
+                """SELECT id, key, name, is_active, created_at, last_used, usage_count, rate_limit
+                FROM api_keys WHERE key = ?""",
+                (api_key,)
+            )
+            result = self.config_cursor.fetchone()
+
+            if result:
+                return {
+                    "id": result[0],
+                    "key": result[1],
+                    "name": result[2],
+                    "is_active": bool(result[3]),
+                    "created_at": result[4],
+                    "last_used": result[5],
+                    "usage_count": result[6],
+                    "rate_limit": result[7]
+                }
+            return None
+
+        except Exception as e:
+            print(f"Error getting API key: {e}")
+            return None
+
+    def get_all_api_keys(self):
+        """
+        Get all API keys from database
+
+        Returns:
+            list: List of API key dictionaries
+        """
+        try:
+            self.config_cursor.execute(
+                """SELECT id, key, name, is_active, created_at, last_used, usage_count, rate_limit
+                FROM api_keys ORDER BY created_at DESC"""
+            )
+            results = self.config_cursor.fetchall()
+
+            api_keys = []
+            for row in results:
+                api_key = {
+                    "id": row[0],
+                    "key": row[1],
+                    "name": row[2],
+                    "is_active": bool(row[3]),
+                    "created_at": row[4],
+                    "last_used": row[5],
+                    "usage_count": row[6],
+                    "rate_limit": row[7]
+                }
+                api_keys.append(api_key)
+
+            return api_keys
+
+        except Exception as e:
+            print(f"Error getting all API keys: {e}")
+            return []
+
+    def insert_api_key(self, key: str, name: str = None, rate_limit: int = None):
+        """
+        Insert a new API key into the database
+
+        Args:
+            key: The API key string
+            name: Friendly name for the key
+            rate_limit: Rate limit for the key (requests per minute)
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            self.config_cursor.execute(
+                """INSERT INTO api_keys (key, name, rate_limit)
+                VALUES (?, ?, ?)""",
+                (key, name, rate_limit)
+            )
+            self.config_connection.commit()
+            print(f"Successfully inserted API key: {name or key[:12]}...")
+            return True
+
+        except Exception as e:
+            print(f"Error inserting API key: {e}")
+            self.config_connection.rollback()
+            return False
+
+    def update_api_key(self, api_key: str, name: str = None, is_active: bool = None, rate_limit: int = None):
+        """
+        Update an existing API key
+
+        Args:
+            api_key: The API key to update
+            name: New name for the key
+            is_active: Whether the key is active
+            rate_limit: New rate limit
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Build dynamic update query
+            updates = []
+            params = []
+
+            if name is not None:
+                updates.append("name = ?")
+                params.append(name)
+            if is_active is not None:
+                updates.append("is_active = ?")
+                params.append(int(is_active))
+            if rate_limit is not None:
+                updates.append("rate_limit = ?")
+                params.append(rate_limit)
+
+            if not updates:
+                return True
+
+            params.append(api_key)
+            query = f"UPDATE api_keys SET {', '.join(updates)} WHERE key = ?"
+
+            self.config_cursor.execute(query, params)
+            self.config_connection.commit()
+
+            if self.config_cursor.rowcount > 0:
+                print(f"Successfully updated API key")
+                return True
+            else:
+                print(f"API key not found")
+                return False
+
+        except Exception as e:
+            print(f"Error updating API key: {e}")
+            self.config_connection.rollback()
+            return False
+
+    def delete_api_key(self, api_key: str):
+        """
+        Delete an API key from the database
+
+        Args:
+            api_key: The API key to delete
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            self.config_cursor.execute(
+                """DELETE FROM api_keys WHERE key = ?""",
+                (api_key,)
+            )
+            self.config_connection.commit()
+
+            if self.config_cursor.rowcount > 0:
+                print(f"Successfully deleted API key")
+                return True
+            else:
+                print(f"API key not found")
+                return False
+
+        except Exception as e:
+            print(f"Error deleting API key: {e}")
+            self.config_connection.rollback()
+            return False
+
+    def log_api_key_usage(self, api_key: str, endpoint: str, method: str, user_agent: str = None, ip_address: str = None):
+        """
+        Log API key usage for analytics
+
+        Args:
+            api_key: The API key that was used
+            endpoint: The endpoint that was accessed
+            method: HTTP method used
+            user_agent: User agent string
+            ip_address: IP address of the request
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            from datetime import datetime
+
+            # Update key usage stats
+            self.config_cursor.execute(
+                """UPDATE api_keys
+                SET usage_count = usage_count + 1, last_used = ?
+                WHERE key = ?""",
+                (datetime.utcnow().isoformat(), api_key)
+            )
+
+            # Log detailed usage
+            self.config_cursor.execute(
+                """INSERT INTO api_usage_logs
+                (api_key, endpoint, method, user_agent, ip_address)
+                VALUES (?, ?, ?, ?, ?)""",
+                (api_key, endpoint, method, user_agent, ip_address)
+            )
+
+            self.config_connection.commit()
+            return True
+
+        except Exception as e:
+            print(f"Error logging API key usage: {e}")
+            self.config_connection.rollback()
+            return False
+
+    def get_api_key_usage_stats(self, api_key: str = None, limit: int = 100):
+        """
+        Get API key usage statistics
+
+        Args:
+            api_key: Specific API key to get stats for (None for all)
+            limit: Maximum number of records to return
+
+        Returns:
+            list: List of usage log dictionaries
+        """
+        try:
+            if api_key:
+                query = """SELECT api_key, endpoint, method, user_agent, ip_address, timestamp
+                        FROM api_usage_logs
+                        WHERE api_key = ?
+                        ORDER BY timestamp DESC
+                        LIMIT ?"""
+                params = (api_key, limit)
+            else:
+                query = """SELECT api_key, endpoint, method, user_agent, ip_address, timestamp
+                        FROM api_usage_logs
+                        ORDER BY timestamp DESC
+                        LIMIT ?"""
+                params = (limit,)
+
+            self.config_cursor.execute(query, params)
+            results = self.config_cursor.fetchall()
+
+            usage_logs = []
+            for row in results:
+                log = {
+                    "api_key": row[0],
+                    "endpoint": row[1],
+                    "method": row[2],
+                    "user_agent": row[3],
+                    "ip_address": row[4],
+                    "timestamp": row[5]
+                }
+                usage_logs.append(log)
+
+            return usage_logs
+
+        except Exception as e:
+            print(f"Error getting API key usage stats: {e}")
+            return []
+
 
 # if __name__ == "__main__":
 #     b = SQLiteDB()
