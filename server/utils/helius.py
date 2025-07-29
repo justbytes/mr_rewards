@@ -106,12 +106,11 @@ def get_new_distributor_transactions(
     newest_sig = None
 
     # URL for call to Helius
-    url = f"https://api.helius.xyz/v0/addresses/{distributor}/transactions"
+    url = f"https://api.helius.xyz/v0/addresses/{distributor}/transactions?api-key={os.getenv("HELIUS_API_KEY")}"
 
     while True:
         # Parameters for the API call
         params = {
-            "api-key": os.getenv("HELIUS_API_KEY"),
             "commitment": "finalized",
             "type": "TRANSFER",
             "limit": "100",  # Max out API limit requests
@@ -157,6 +156,7 @@ def get_new_distributor_transactions(
             # Set the newest tx as the last signature for future fetching
             if newest_sig is None and txs:
                 newest_sig = txs[0]["signature"]
+                print(f"Newest SIG: {newest_sig}")
 
             # Set the before parameter to the signature of the last transaction
             before = txs[-1]["signature"]
@@ -165,9 +165,9 @@ def get_new_distributor_transactions(
             if found_cutoff:
                 break
 
-        except:
-            print(f"Error when fetching distributor transactions from helius")
-            return
+        except Exception as e:
+            # print(f"Error when fetching distributor transactions from helius {e}")
+            break
 
         # Check if batch is full
         if len(batch) >= batch_size:

@@ -1,6 +1,3 @@
-import time
-import threading
-
 def process_distributor_transactions(transactions):
     """ Filters a transaction and extracts the feePayer, signature, slot, timestamp, and native/spl transfers """
     filtered_txs = []
@@ -121,16 +118,3 @@ def aggregate_transfers(transfers):
             }
 
     return wallets
-
-def timer(func, seconds, *args, **kwargs):
-    """
-    Calls a function every 5 minutes in a separate thread.
-    """
-    def run():
-        while True:
-            func(*args, **kwargs)
-            time.sleep(seconds)
-
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
-    return thread

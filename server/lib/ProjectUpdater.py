@@ -9,38 +9,40 @@ if hasattr(sys, '_getframe'):
     if server_dir not in sys.path:
         sys.path.insert(0, server_dir)
 
-from utils.utils import process_distributor_transfers, aggregate_transfers, timer
+from utils.utils import process_distributor_transfers, aggregate_transfers
 from utils.helius import get_token_metadata, get_new_distributor_transactions
 
 class ProjectUpdater:
 
     def __init__(self, controller):
         self.controller = controller
-        self.begin_polling()
         self.updating = False
-
-    def begin_polling(self):
-        """
-        Runs the update distributors function every five minutes(300 seconds) using the timer utility to check for new transactions
-        """
-        timer(self.update_distributors_transactions, 300)
 
     def update_distributors_transactions(self):
         """This will loop through each supported project and get any new transfers"""
 
-        if self.updating is True:
+        if self.updating:
+            print("Update already in progress, skipping...")
             return
 
-        projects = self.controller.sqlite.get_supported_projects()
+        try:
+            print("Starting database update...")
+            projects = self.controller.sqlite.get_supported_projects()
 
-        self.updating = True
+            self.updating = True
 
-        for project in projects:
-            distributor = project.get("distributor")
-            self.fetch_and_process_new_distributor_transactions(distributor)
+            for project in projects:
+                distributor = project.get("distributor")
+                print(f"Processing distributor: {distributor}")
+                self.fetch_and_process_new_distributor_transactions(distributor)
 
-        print("Update complete")
-        self.updating = False
+            print("Update complete")
+
+        except Exception as e:
+            print(f"Error in update_distributors_transactions: {e}")
+            raise
+        finally:
+            self.updating = False
 
     def fetch_and_process_new_distributor_transactions(self, distributor):
         """
@@ -93,7 +95,7 @@ class ProjectUpdater:
                 batch_num = (i // batch_size) + 1
 
                 # Get the transfers
-                processed_batch = process_distributor_transfers(self, batch, distributor)
+                processed_batch = process_distributor_transfers(self.controller, batch, distributor)
 
                 # Insert into database and get what was actually inserted
                 success = self.controller.sqlite.insert_temp_transfers_batch(processed_batch)

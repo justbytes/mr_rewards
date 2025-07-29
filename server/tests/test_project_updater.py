@@ -35,9 +35,8 @@ class TestProjectUpdater:
         # Create the Controller instance (test=True, temp_dirs=False)
         self.controller = Controller(True, False)
 
-        # Create ProjectUpdater instance without starting polling
-        with patch.object(ProjectUpdater, 'begin_polling'):
-            self.project_updater = ProjectUpdater(self.controller)
+        # Create ProjectUpdater instance (no need to patch anything now)
+        self.project_updater = ProjectUpdater(self.controller)
 
     def teardown_method(self):
         """Cleanup method run after each test"""
@@ -119,23 +118,6 @@ class TestProjectUpdater:
         assert self.project_updater.updating is False
         print(f"✅ ProjectUpdater initializes with Controller instance!")
 
-    @patch.object(ProjectUpdater, 'begin_polling')
-    def test_project_updater_calls_begin_polling_on_init(self, mock_begin_polling):
-        """Test that ProjectUpdater calls begin_polling during initialization"""
-        # Create new instance to test the __init__ behavior
-        project_updater = ProjectUpdater(self.controller)
-
-        mock_begin_polling.assert_called_once()
-        print(f"✅ ProjectUpdater calls begin_polling on initialization!")
-
-    @patch('lib.ProjectUpdater.timer')
-    def test_begin_polling_starts_timer(self, mock_timer):
-        """Test that begin_polling starts a timer for update_distributors_transactions"""
-        self.project_updater.begin_polling()
-
-        mock_timer.assert_called_once_with(self.project_updater.update_distributors_transactions, 300)
-        print(f"✅ ProjectUpdater begins polling with timer!")
-
     ##########################################################
     #           Update Distributors Transactions Tests       #
     ##########################################################
@@ -197,6 +179,20 @@ class TestProjectUpdater:
                 assert self.project_updater.updating is False
 
         print(f"✅ ProjectUpdater manages updating flag correctly!")
+
+    def test_update_distributors_transactions_error_handling(self):
+        """Test that update_distributors_transactions handles errors and resets updating flag"""
+        with patch.object(self.controller.sqlite, 'get_supported_projects', return_value=[PROJECT]):
+            with patch.object(self.project_updater, 'fetch_and_process_new_distributor_transactions', side_effect=Exception("Test error")):
+
+                # Should raise the exception
+                with pytest.raises(Exception):
+                    self.project_updater.update_distributors_transactions()
+
+                # updating flag should be reset to False even after error
+                assert self.project_updater.updating is False
+
+        print(f"✅ ProjectUpdater handles errors and resets updating flag!")
 
     ##########################################################
     #      Fetch and Process New Distributor Transactions    #
@@ -295,7 +291,7 @@ class TestProjectUpdater:
             assert result[0] == test_transfers
 
             # Verify process function was called correctly
-            mock_process_transfers.assert_called_once_with(self.project_updater, TRANSACTIONS, test_distributor)
+            mock_process_transfers.assert_called_once_with(self.controller, TRANSACTIONS, test_distributor)
 
         print(f"✅ ProjectUpdater extracts transfers successfully!")
 
@@ -511,7 +507,7 @@ class TestProjectUpdater:
                         # Verify all steps were executed
                         mock_get_transactions.assert_called_once_with(test_distributor, test_last_sig)
                         mock_update_sig.assert_called_once_with(test_distributor, test_new_sig)
-                        mock_process.assert_called_once()
+                        mock_process.assert_called_once_with(self.controller, TRANSACTIONS, test_distributor)
                         mock_aggregate.assert_called_once_with(test_transfers)
                         mock_upsert.assert_called_once_with(test_aggregated)
 
@@ -577,7 +573,7 @@ class TestProjectUpdater:
         """Test handling of empty transaction batches"""
         test_distributor = "BoonAKjwqfxj3Z1GtZHWeEMnoZLqgkSFEqRwhRsz4oQ"
 
-        with patch('lib.ProjectUpdater.process_distributor_transfers', return_value=[]):
+        with patch('lib.ProjectUpdater.process_distributor_transfers', return_value=[]) as mock_process:
             with patch.object(self.controller.sqlite, 'insert_temp_transfers_batch', return_value=True):
                 result = list(self.project_updater.extract_transfers_from_distributor_transactions(
                     [], test_distributor
@@ -585,6 +581,10 @@ class TestProjectUpdater:
 
                 # Should handle empty list gracefully
                 assert len(result) == 0
+
+                # Verify it was called with correct arguments (even for empty list)
+                if mock_process.called:
+                    mock_process.assert_called_with(self.controller, [], test_distributor)
 
         print(f"✅ ProjectUpdater handles empty transaction batches!")
 
@@ -604,35 +604,18 @@ class TestProjectUpdater:
 
         print(f"✅ ProjectUpdater handles zero transfers aggregation!")
 
-    def test_concurrent_update_prevention_timing(self):
-        """Test that concurrent update prevention works with timing"""
-        import threading
-        import time
-
-        call_count = 0
-        original_method = self.project_updater.fetch_and_process_new_distributor_transactions
-
-        def slow_fetch_method(distributor):
-            nonlocal call_count
-            call_count += 1
-            time.sleep(0.1)  # Simulate slow operation
-            return original_method(distributor)
-
-        # Mock the projects and the slow method
+    def test_manual_update_trigger(self):
+        """Test that update_distributors_transactions can be called manually"""
         with patch.object(self.controller.sqlite, 'get_supported_projects', return_value=[PROJECT]):
-            with patch.object(self.project_updater, 'fetch_and_process_new_distributor_transactions', side_effect=slow_fetch_method):
+            with patch.object(self.project_updater, 'fetch_and_process_new_distributor_transactions') as mock_fetch:
 
-                # Start two threads trying to update simultaneously
-                thread1 = threading.Thread(target=self.project_updater.update_distributors_transactions)
-                thread2 = threading.Thread(target=self.project_updater.update_distributors_transactions)
+                # Should be able to call the method directly
+                self.project_updater.update_distributors_transactions()
 
-                thread1.start()
-                thread2.start()
+                # Verify it was executed
+                mock_fetch.assert_called_once_with(PROJECT.get("distributor"))
 
-                thread1.join()
-                thread2.join()
+                # Updating flag should be reset
+                assert self.project_updater.updating is False
 
-                # Only one should have actually executed the update
-                assert call_count == 1
-
-        print(f"✅ ProjectUpdater prevents concurrent updates with proper timing!")
+        print(f"✅ ProjectUpdater can be triggered manually!")

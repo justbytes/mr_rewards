@@ -4,7 +4,7 @@ from typing import List
 from lib.Controller import Controller
 from .dependency import get_controller
 from .models import HealthResponse, SupportedProject
-from .auth import api_key_auth  # Import Bearer token auth
+from .auth import api_key_auth
 from limiter import limiter
 
 # Initialize the router

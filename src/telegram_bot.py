@@ -588,8 +588,6 @@ def mr_rewards_bot():
             message.chat.id, response_text, reply_markup=markup, parse_mode="Markdown"
         )
 
-     # Start a timer that cleans the users cache every 1 hr and 15 minutes(4500 seconds)
-
     # Begin polling
     bot.infinity_polling()
 
