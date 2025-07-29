@@ -1,15 +1,15 @@
-#!/usr/bin/env python3
-"""
-Interactive System Menu
-Provides a menu to run SQLite tests, MongoDB tests, Controller tests, ProjectUpdater tests,
-ProjectInitializer tests, initialize new projects, get database counts, manage API keys, or all tests.
-"""
-
 import sys
 import subprocess
 import os
 import json
 from pathlib import Path
+from server.lib.BackerUpper import BackerUpper
+
+"""
+Interactive System Menu
+Provides a menu to run SQLite tests, MongoDB tests, Controller tests, ProjectUpdater tests,
+ProjectInitializer tests, initialize new projects, get database counts, manage API keys, or all tests.
+"""
 
 # Setup paths
 PROJECT_ROOT = Path(__file__).parent
@@ -21,8 +21,29 @@ def setup_python_path():
     sys.path.insert(0, str(PROJECT_ROOT))
     sys.path.insert(0, str(SERVER_DIR))
 
+def get_user_input(prompt, required=True, default=None):
+    """Get user input with optional validation"""
+    while True:
+        try:
+            if default:
+                user_input = input(f"{prompt} (default: {default}): ").strip()
+                if not user_input:
+                    return default
+            else:
+                user_input = input(f"{prompt}: ").strip()
+
+            if required and not user_input:
+                print("❌ This field is required. Please enter a value.")
+                continue
+
+            return user_input if user_input else None
+
+        except KeyboardInterrupt:
+            print("\n\n👋 Operation cancelled!")
+            return None
+
 ##########################################################
-#              Backup Data To Local Storage              #
+#                      Data Management                   #
 ##########################################################
 
 def get_sqlite_counts():
@@ -58,31 +79,6 @@ def get_sqlite_counts():
     except Exception as e:
         print(f"❌ Error getting SQLite counts: {e}")
         return False
-
-##########################################################
-#                 Initialize New Projects                #
-##########################################################
-
-def get_user_input(prompt, required=True, default=None):
-    """Get user input with optional validation"""
-    while True:
-        try:
-            if default:
-                user_input = input(f"{prompt} (default: {default}): ").strip()
-                if not user_input:
-                    return default
-            else:
-                user_input = input(f"{prompt}: ").strip()
-
-            if required and not user_input:
-                print("❌ This field is required. Please enter a value.")
-                continue
-
-            return user_input if user_input else None
-
-        except KeyboardInterrupt:
-            print("\n\n👋 Operation cancelled!")
-            return None
 
 def initialize_project():
     """Initialize a new project with user input"""
@@ -153,6 +149,24 @@ def initialize_project():
 
     except Exception as e:
         print(f"❌ Error initializing project: {e}")
+        return False
+
+def backup_temp_transfers():
+    """Initialize a new project with user input"""
+    print("🏗️  Backing up temp transfers...")
+    print("=" * 40)
+
+    try:
+        backup = BackerUpper()
+        success = backup.backup_all_distributor_transfers()
+
+        if success is not True:
+            return False
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error backing up temp transfers: {e}")
         return False
 
 ##########################################################
@@ -867,22 +881,23 @@ def show_menu():
     print("📊 Data Management:")
     print("1. 📋  Get SQLite Database Counts")
     print("2. 🏗️  Initialize New Project")
+    print("3. 💾  Backup Temp Transfers")
     print()
     print("🔑 API Key Management:")
-    print("3. 🔑  Create New API Key")
-    print("4. 📋  List All API Keys")
-    print("5. 🔧  Manage API Keys")
+    print("4. 🔑  Create New API Key")
+    print("5. 📋  List All API Keys")
+    print("6. 🔧  Manage API Keys")
     print()
     print("🧪 Testing Options:")
-    print("6. 🗃️  SQLite Tests Only")
-    print("7. 🍃  MongoDB Tests Only")
-    print("8. 🎛️  Controller Tests Only")
-    print("9. 🔄  ProjectUpdater Tests Only")
-    print("10. 🏗️ ProjectInitializer Tests Only")
-    print("11. 🔗 Database Tests (SQLite + MongoDB)")
-    print("12. 🧠 Business Logic Tests (Controller + ProjectUpdater + ProjectInitializer)")
-    print("13. 🚀 Run All Tests (Complete Suite)")
-    print("14. ❌ Exit")
+    print("7. 🗃️  SQLite Tests Only")
+    print("8. 🍃  MongoDB Tests Only")
+    print("9. 🎛️  Controller Tests Only")
+    print("10. 🔄  ProjectUpdater Tests Only")
+    print("11. 🏗️ ProjectInitializer Tests Only")
+    print("12. 🔗 Database Tests (SQLite + MongoDB)")
+    print("13. 🧠 Business Logic Tests (Controller + ProjectUpdater + ProjectInitializer)")
+    print("14. 🚀 Run All Tests (Complete Suite)")
+    print("15. ❌ Exit")
     print()
 
 def get_user_choice():
@@ -921,61 +936,66 @@ def main():
             success = initialize_project()
 
         elif choice == 3:
+            print("💾  Backup Temp Transfers...")
+            print("=" * 40)
+            success = backup_temp_transfers()
+
+        elif choice == 4:
             print("🔑 Create New API Key...")
             print("=" * 40)
             success = create_api_key()
 
-        elif choice == 4:
+        elif choice == 5:
             print("📋 List All API Keys...")
             print("=" * 40)
             success = list_api_keys()
 
-        elif choice == 5:
+        elif choice == 6:
             print("🔧 Manage API Keys...")
             print("=" * 40)
             success = manage_api_key()
 
-        elif choice == 6:
+        elif choice == 7:
             print("🗃️  Starting SQLite Tests...")
             print("=" * 40)
             success = run_sqlite_tests()
 
-        elif choice == 7:
+        elif choice == 8:
             print("🍃  Starting MongoDB Tests...")
             print("=" * 40)
             success = run_mongodb_tests()
 
-        elif choice == 8:
+        elif choice == 9:
             print("🎛️  Starting Controller Integration Tests...")
             print("=" * 40)
             success = run_controller_tests()
 
-        elif choice == 9:
+        elif choice == 10:
             print("🔄  Starting ProjectUpdater Tests...")
             print("=" * 40)
             success = run_project_updater_tests()
 
-        elif choice == 10:
+        elif choice == 11:
             print("🏗️  Starting ProjectInitializer Tests...")
             print("=" * 40)
             success = run_project_initializer_tests()
 
-        elif choice == 11:
+        elif choice == 12:
             print("🔗  Starting Database Tests...")
             print("=" * 40)
             success = run_database_tests()
 
-        elif choice == 12:
+        elif choice == 13:
             print("🧠  Starting Business Logic Tests...")
             print("=" * 40)
             success = run_business_logic_tests()
 
-        elif choice == 13:
+        elif choice == 14:
             print("🚀  Starting Complete Test Suite...")
             print("=" * 40)
             success = run_all_tests()
 
-        elif choice == 14:
+        elif choice == 15:
             print("👋 Goodbye!")
             break
 
