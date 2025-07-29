@@ -5,6 +5,8 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 import asyncio
+import concurrent.futures
+from datetime import datetime
 
 from routes import system_config, wallet_rewards
 from routes.models import RootResponse
@@ -21,7 +23,7 @@ async def periodic_update():
     """Simple periodic update that runs in the main event loop"""
     while True:
         try:
-            await asyncio.sleep(25)  # Wait 5 minutes (300 seconds)
+            await asyncio.sleep(300)  # Wait 5 minutes (300 seconds)
 
             if project_updater and not project_updater.updating:
                 print("Running scheduled database update...")

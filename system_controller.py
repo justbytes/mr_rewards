@@ -2,7 +2,7 @@
 """
 Interactive System Menu
 Provides a menu to run SQLite tests, MongoDB tests, Controller tests, ProjectUpdater tests,
-ProjectInitializer tests, initialize new projects, get database counts, or all tests.
+ProjectInitializer tests, initialize new projects, get database counts, manage API keys, or all tests.
 """
 
 import sys
@@ -20,6 +20,10 @@ def setup_python_path():
     """Add necessary paths to Python path"""
     sys.path.insert(0, str(PROJECT_ROOT))
     sys.path.insert(0, str(SERVER_DIR))
+
+##########################################################
+#              Backup Data To Local Storage              #
+##########################################################
 
 def get_sqlite_counts():
     """Get and display SQLite database counts"""
@@ -54,6 +58,10 @@ def get_sqlite_counts():
     except Exception as e:
         print(f"❌ Error getting SQLite counts: {e}")
         return False
+
+##########################################################
+#                 Initialize New Projects                #
+##########################################################
 
 def get_user_input(prompt, required=True, default=None):
     """Get user input with optional validation"""
@@ -98,8 +106,8 @@ def initialize_project():
             return False
 
         dev_wallet = get_user_input("Dev wallet address (optional)", required=False)
-        if dev_wallet is None:
-            return False
+
+        last_sig = get_user_input("Last tx signature (optional)", required=False)
 
         # Project dictionary
         project = {
@@ -107,7 +115,7 @@ def initialize_project():
             "distributor": distributor,
             "token_mint": token_mint,
             "dev_wallet": dev_wallet,
-            "last_sig": None
+            "last_sig": last_sig
         }
 
         print("\n📋 Project Summary:")
@@ -128,9 +136,13 @@ def initialize_project():
         # Setup paths and import after path setup
         setup_python_path()
         from server.lib.ProjectInitializer import ProjectInitializer
+        from server.lib.Controller import Controller
+
+        # Create Controller instance
+        controller = Controller(False, False)
 
         # Create instance of initializer
-        initializer = ProjectInitializer(project)
+        initializer = ProjectInitializer(controller, project)
 
         # Initialize the new project
         print("\n🚀 Initializing project...")
@@ -143,6 +155,454 @@ def initialize_project():
         print(f"❌ Error initializing project: {e}")
         return False
 
+##########################################################
+#                   API Key Management                   #
+##########################################################
+
+def create_api_key():
+    """Create a new API key with user input"""
+    print("🔑 Creating New API Key...")
+    print("=" * 30)
+    print()
+
+    try:
+        # Get API key information from user
+        name = get_user_input("API Key name", required=False, default="System Generated Key")
+        if name is None:
+            return False
+
+        rate_limit_input = get_user_input("Rate limit (requests/minute)", required=False, default="1000")
+        if rate_limit_input is None:
+            return False
+
+        # Parse rate limit
+        try:
+            rate_limit = int(rate_limit_input) if rate_limit_input.isdigit() else 1000
+        except ValueError:
+            rate_limit = 1000
+
+        print(f"\n📋 API Key Summary:")
+        print("-" * 20)
+        print(f"Name: {name}")
+        print(f"Rate Limit: {rate_limit} requests/minute")
+        print()
+
+        # Confirm before proceeding
+        confirm = input("Do you want to create this API key? (y/N): ").strip().lower()
+        if confirm != 'y':
+            print("❌ API key creation cancelled.")
+            return False
+
+        # Setup paths and import after path setup
+        setup_python_path()
+        from server.db.SQLite.db import SQLiteDB
+        from server.utils.api_key_management import generate_api_key
+
+        # Create SQLite instance
+        sqlite_db = SQLiteDB(test=False, temp=False)
+
+        # Generate a new API key
+        api_key = generate_api_key()
+
+        # Insert into database
+        success = sqlite_db.insert_api_key(api_key, name, rate_limit)
+
+        if success:
+            print(f"\n🎉 API Key created successfully!")
+            print(f"📋 Details:")
+            print("-" * 20)
+            print(f"Key: {api_key}")
+            print(f"Name: {name}")
+            print(f"Rate Limit: {rate_limit} requests/minute")
+            print(f"\n🔐 Add this to your .env file:")
+            print(f"API_KEY={api_key}")
+            print(f"\n📖 Use this key in Authorization headers:")
+            print(f"Authorization: Bearer {api_key}")
+            return True
+        else:
+            print("❌ Failed to create API key")
+            return False
+
+    except Exception as e:
+        print(f"❌ Error creating API key: {e}")
+        return False
+
+def list_api_keys():
+    """List all API keys"""
+    print("📋 API Key List...")
+    print("=" * 40)
+
+    try:
+        # Setup paths and import after path setup
+        setup_python_path()
+        from server.db.SQLite.db import SQLiteDB
+
+        sqlite_db = SQLiteDB(test=False, temp=False)
+        keys = sqlite_db.get_all_api_keys()
+
+        if not keys:
+            print("📋 No API keys found")
+            return True
+
+        print(f"\n📋 Found {len(keys)} API key(s):")
+        print()
+        print(f"{'ID':<5} {'Name':<25} {'Key Preview':<20} {'Active':<8} {'Usage':<8} {'Rate Limit':<12} {'Created':<20}")
+        print("-" * 105)
+
+        for key in keys:
+            key_preview = key['key'][:16] + "..." if len(key['key']) > 16 else key['key']
+            rate_limit_display = str(key['rate_limit']) if key['rate_limit'] else 'Unlimited'
+            created_display = key['created_at'][:19] if key['created_at'] else 'Unknown'
+            print(f"{key['id']:<5} {(key['name'] or 'Unnamed'):<25} {key_preview:<20} "
+                  f"{'Yes' if key['is_active'] else 'No':<8} {key['usage_count']:<8} {rate_limit_display:<12} {created_display:<20}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error listing API keys: {e}")
+        return False
+
+def manage_api_key():
+    """Manage an existing API key (deactivate, update, etc.)"""
+    print("🔧 Manage API Key...")
+    print("=" * 30)
+
+    try:
+        # First, show current keys
+        if not list_api_keys():
+            return False
+
+        print("\n" + "=" * 40)
+        print("Management Options:")
+        print("1. Deactivate API Key")
+        print("2. Reactivate API Key")
+        print("3. Update API Key Name")
+        print("4. Update Rate Limit")
+        print("5. Delete API Key")
+        print("6. Show API Key Usage Stats")
+        print("0. Back to main menu")
+
+        choice = input("\nEnter your choice (0-6): ").strip()
+
+        if choice == "0":
+            return True
+        elif choice == "1":
+            return deactivate_api_key()
+        elif choice == "2":
+            return reactivate_api_key()
+        elif choice == "3":
+            return update_api_key_name()
+        elif choice == "4":
+            return update_api_key_rate_limit()
+        elif choice == "5":
+            return delete_api_key()
+        elif choice == "6":
+            return show_api_key_usage()
+        else:
+            print("❌ Invalid choice")
+            return False
+
+    except Exception as e:
+        print(f"❌ Error managing API key: {e}")
+        return False
+
+def deactivate_api_key():
+    """Deactivate an API key"""
+    try:
+        api_key = get_user_input("Enter API key to deactivate", required=True)
+        if api_key is None:
+            return False
+
+        setup_python_path()
+        from server.db.SQLite.db import SQLiteDB
+
+        sqlite_db = SQLiteDB(test=False, temp=False)
+
+        # Verify key exists first
+        key_data = sqlite_db.get_api_key(api_key)
+        if not key_data:
+            print("❌ API key not found")
+            return False
+
+        print(f"\n📋 Key to deactivate:")
+        print(f"Name: {key_data['name'] or 'Unnamed'}")
+        print(f"Currently Active: {'Yes' if key_data['is_active'] else 'No'}")
+
+        if not key_data['is_active']:
+            print("⚠️  This key is already inactive")
+            return True
+
+        confirm = input("\nAre you sure you want to deactivate this key? (y/N): ").strip().lower()
+        if confirm != 'y':
+            print("❌ Operation cancelled")
+            return False
+
+        success = sqlite_db.update_api_key(api_key, is_active=False)
+
+        if success:
+            print("✅ API key deactivated successfully")
+            return True
+        else:
+            print("❌ Failed to deactivate API key")
+            return False
+
+    except Exception as e:
+        print(f"❌ Error deactivating API key: {e}")
+        return False
+
+def reactivate_api_key():
+    """Reactivate an API key"""
+    try:
+        api_key = get_user_input("Enter API key to reactivate", required=True)
+        if api_key is None:
+            return False
+
+        setup_python_path()
+        from server.db.SQLite.db import SQLiteDB
+
+        sqlite_db = SQLiteDB(test=False, temp=False)
+
+        # Verify key exists first
+        key_data = sqlite_db.get_api_key(api_key)
+        if not key_data:
+            print("❌ API key not found")
+            return False
+
+        print(f"\n📋 Key to reactivate:")
+        print(f"Name: {key_data['name'] or 'Unnamed'}")
+        print(f"Currently Active: {'Yes' if key_data['is_active'] else 'No'}")
+
+        if key_data['is_active']:
+            print("⚠️  This key is already active")
+            return True
+
+        confirm = input("\nAre you sure you want to reactivate this key? (y/N): ").strip().lower()
+        if confirm != 'y':
+            print("❌ Operation cancelled")
+            return False
+
+        success = sqlite_db.update_api_key(api_key, is_active=True)
+
+        if success:
+            print("✅ API key reactivated successfully")
+            return True
+        else:
+            print("❌ Failed to reactivate API key")
+            return False
+
+    except Exception as e:
+        print(f"❌ Error reactivating API key: {e}")
+        return False
+
+def update_api_key_name():
+    """Update an API key's name"""
+    try:
+        api_key = get_user_input("Enter API key to update", required=True)
+        if api_key is None:
+            return False
+
+        setup_python_path()
+        from server.db.SQLite.db import SQLiteDB
+
+        sqlite_db = SQLiteDB(test=False, temp=False)
+
+        # Verify key exists first
+        key_data = sqlite_db.get_api_key(api_key)
+        if not key_data:
+            print("❌ API key not found")
+            return False
+
+        print(f"\n📋 Current key info:")
+        print(f"Name: {key_data['name'] or 'Unnamed'}")
+
+        new_name = get_user_input("Enter new name", required=True)
+        if new_name is None:
+            return False
+
+        success = sqlite_db.update_api_key(api_key, name=new_name)
+
+        if success:
+            print(f"✅ API key name updated to: {new_name}")
+            return True
+        else:
+            print("❌ Failed to update API key name")
+            return False
+
+    except Exception as e:
+        print(f"❌ Error updating API key name: {e}")
+        return False
+
+def update_api_key_rate_limit():
+    """Update an API key's rate limit"""
+    try:
+        api_key = get_user_input("Enter API key to update", required=True)
+        if api_key is None:
+            return False
+
+        setup_python_path()
+        from server.db.SQLite.db import SQLiteDB
+
+        sqlite_db = SQLiteDB(test=False, temp=False)
+
+        # Verify key exists first
+        key_data = sqlite_db.get_api_key(api_key)
+        if not key_data:
+            print("❌ API key not found")
+            return False
+
+        print(f"\n📋 Current key info:")
+        print(f"Name: {key_data['name'] or 'Unnamed'}")
+        print(f"Current Rate Limit: {key_data['rate_limit'] or 'Unlimited'}")
+
+        new_rate_limit_input = get_user_input("Enter new rate limit (requests/minute, or 'unlimited')", required=True)
+        if new_rate_limit_input is None:
+            return False
+
+        # Parse rate limit
+        if new_rate_limit_input.lower() == 'unlimited':
+            new_rate_limit = None
+        else:
+            try:
+                new_rate_limit = int(new_rate_limit_input)
+                if new_rate_limit <= 0:
+                    print("❌ Rate limit must be a positive number")
+                    return False
+            except ValueError:
+                print("❌ Invalid rate limit format")
+                return False
+
+        success = sqlite_db.update_api_key(api_key, rate_limit=new_rate_limit)
+
+        if success:
+            limit_display = new_rate_limit if new_rate_limit else "Unlimited"
+            print(f"✅ API key rate limit updated to: {limit_display}")
+            return True
+        else:
+            print("❌ Failed to update API key rate limit")
+            return False
+
+    except Exception as e:
+        print(f"❌ Error updating API key rate limit: {e}")
+        return False
+
+def delete_api_key():
+    """Delete an API key"""
+    try:
+        api_key = get_user_input("Enter API key to DELETE", required=True)
+        if api_key is None:
+            return False
+
+        setup_python_path()
+        from server.db.SQLite.db import SQLiteDB
+
+        sqlite_db = SQLiteDB(test=False, temp=False)
+
+        # Verify key exists first
+        key_data = sqlite_db.get_api_key(api_key)
+        if not key_data:
+            print("❌ API key not found")
+            return False
+
+        print(f"\n⚠️  WARNING: You are about to DELETE this API key:")
+        print(f"Name: {key_data['name'] or 'Unnamed'}")
+        print(f"Usage Count: {key_data['usage_count']}")
+        print(f"Active: {'Yes' if key_data['is_active'] else 'No'}")
+        print("\n🚨 This action CANNOT be undone!")
+
+        confirm1 = input("\nType 'DELETE' to confirm: ").strip()
+        if confirm1 != 'DELETE':
+            print("❌ Operation cancelled")
+            return False
+
+        confirm2 = input("Are you absolutely sure? (y/N): ").strip().lower()
+        if confirm2 != 'y':
+            print("❌ Operation cancelled")
+            return False
+
+        success = sqlite_db.delete_api_key(api_key)
+
+        if success:
+            print("✅ API key deleted successfully")
+            return True
+        else:
+            print("❌ Failed to delete API key")
+            return False
+
+    except Exception as e:
+        print(f"❌ Error deleting API key: {e}")
+        return False
+
+def show_api_key_usage():
+    """Show usage statistics for an API key"""
+    try:
+        print("\nUsage Statistics Options:")
+        print("1. Show usage for specific API key")
+        print("2. Show usage for all API keys")
+
+        choice = input("Enter your choice (1-2): ").strip()
+
+        setup_python_path()
+        from server.db.SQLite.db import SQLiteDB
+
+        sqlite_db = SQLiteDB(test=False, temp=False)
+
+        if choice == "1":
+            api_key = get_user_input("Enter API key", required=True)
+            if api_key is None:
+                return False
+
+            # Verify key exists
+            key_data = sqlite_db.get_api_key(api_key)
+            if not key_data:
+                print("❌ API key not found")
+                return False
+
+            print(f"\n📊 Usage Statistics for: {key_data['name'] or 'Unnamed'}")
+            print("-" * 50)
+            print(f"Total Usage Count: {key_data['usage_count']}")
+            print(f"Last Used: {key_data['last_used'] or 'Never'}")
+            print(f"Rate Limit: {key_data['rate_limit'] or 'Unlimited'}")
+            print(f"Status: {'Active' if key_data['is_active'] else 'Inactive'}")
+
+            # Get detailed usage logs
+            usage_logs = sqlite_db.get_api_key_usage_stats(api_key, 10)
+
+            if usage_logs:
+                print(f"\n📋 Recent Usage (last 10 requests):")
+                print(f"{'Endpoint':<25} {'Method':<8} {'IP Address':<15} {'Timestamp':<20}")
+                print("-" * 75)
+                for log in usage_logs:
+                    timestamp_display = log['timestamp'][:19] if log['timestamp'] else 'Unknown'
+                    print(f"{log['endpoint']:<25} {log['method']:<8} {log['ip_address'] or 'Unknown':<15} {timestamp_display:<20}")
+            else:
+                print("\n📋 No usage logs found")
+
+        elif choice == "2":
+            # Show usage for all keys
+            usage_logs = sqlite_db.get_api_key_usage_stats(None, 20)
+
+            if usage_logs:
+                print(f"\n📊 Recent Usage Across All API Keys (last 20 requests):")
+                print("-" * 80)
+                print(f"{'API Key':<20} {'Endpoint':<20} {'Method':<8} {'IP Address':<15} {'Timestamp':<20}")
+                print("-" * 90)
+                for log in usage_logs:
+                    key_display = log['api_key'][:16] + "..." if len(log['api_key']) > 16 else log['api_key']
+                    timestamp_display = log['timestamp'][:19] if log['timestamp'] else 'Unknown'
+                    print(f"{key_display:<20} {log['endpoint']:<20} {log['method']:<8} {log['ip_address'] or 'Unknown':<15} {timestamp_display:<20}")
+            else:
+                print("\n📋 No usage logs found")
+        else:
+            print("❌ Invalid choice")
+            return False
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error showing API key usage: {e}")
+        return False
+
+# Test functions from original system_test.py
 def run_sqlite_tests():
     """Run the SQLite tests"""
     print("🧪 Running SQLite tests...")
@@ -262,7 +722,7 @@ def run_project_initializer_tests():
 
     if not test_file.exists():
         print(f"❌ Test file not found: {test_file}")
-        print("�101 Make sure you've created the test_project_initializer.py file in the tests directory")
+        print("💡 Make sure you've created the test_project_initializer.py file in the tests directory")
         return False
 
     try:
@@ -408,27 +868,32 @@ def show_menu():
     print("1. 📋  Get SQLite Database Counts")
     print("2. 🏗️  Initialize New Project")
     print()
+    print("🔑 API Key Management:")
+    print("3. 🔑  Create New API Key")
+    print("4. 📋  List All API Keys")
+    print("5. 🔧  Manage API Keys")
+    print()
     print("🧪 Testing Options:")
-    print("3. 🗃️  SQLite Tests Only")
-    print("4. 🍃  MongoDB Tests Only")
-    print("5. 🎛️  Controller Tests Only")
-    print("6. 🔄  ProjectUpdater Tests Only")
-    print("7. 🏗️  ProjectInitializer Tests Only")
-    print("8. 🔗  Database Tests (SQLite + MongoDB)")
-    print("9. 🧠  Business Logic Tests (Controller + ProjectUpdater + ProjectInitializer)")
-    print("10. 🚀 Run All Tests (Complete Suite)")
-    print("11. ❌ Exit")
+    print("6. 🗃️  SQLite Tests Only")
+    print("7. 🍃  MongoDB Tests Only")
+    print("8. 🎛️  Controller Tests Only")
+    print("9. 🔄  ProjectUpdater Tests Only")
+    print("10. 🏗️ ProjectInitializer Tests Only")
+    print("11. 🔗 Database Tests (SQLite + MongoDB)")
+    print("12. 🧠 Business Logic Tests (Controller + ProjectUpdater + ProjectInitializer)")
+    print("13. 🚀 Run All Tests (Complete Suite)")
+    print("14. ❌ Exit")
     print()
 
 def get_user_choice():
     """Get and validate user choice"""
     while True:
         try:
-            choice = input("Enter your choice (1-11): ").strip()
-            if choice in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']:
+            choice = input("Enter your choice (1-14): ").strip()
+            if choice in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']:
                 return int(choice)
             else:
-                print("❌ Invalid choice. Please enter 1-11.")
+                print("❌ Invalid choice. Please enter 1-14.")
         except KeyboardInterrupt:
             print("\n\n👋 Goodbye!")
             sys.exit(0)
@@ -456,46 +921,61 @@ def main():
             success = initialize_project()
 
         elif choice == 3:
+            print("🔑 Create New API Key...")
+            print("=" * 40)
+            success = create_api_key()
+
+        elif choice == 4:
+            print("📋 List All API Keys...")
+            print("=" * 40)
+            success = list_api_keys()
+
+        elif choice == 5:
+            print("🔧 Manage API Keys...")
+            print("=" * 40)
+            success = manage_api_key()
+
+        elif choice == 6:
             print("🗃️  Starting SQLite Tests...")
             print("=" * 40)
             success = run_sqlite_tests()
 
-        elif choice == 4:
+        elif choice == 7:
             print("🍃  Starting MongoDB Tests...")
             print("=" * 40)
             success = run_mongodb_tests()
 
-        elif choice == 5:
+        elif choice == 8:
             print("🎛️  Starting Controller Integration Tests...")
             print("=" * 40)
             success = run_controller_tests()
 
-        elif choice == 6:
+        elif choice == 9:
             print("🔄  Starting ProjectUpdater Tests...")
             print("=" * 40)
             success = run_project_updater_tests()
 
-        elif choice == 7:
+        elif choice == 10:
             print("🏗️  Starting ProjectInitializer Tests...")
             print("=" * 40)
             success = run_project_initializer_tests()
 
-        elif choice == 8:
+        elif choice == 11:
             print("🔗  Starting Database Tests...")
             print("=" * 40)
             success = run_database_tests()
 
-        elif choice == 9:
+        elif choice == 12:
             print("🧠  Starting Business Logic Tests...")
             print("=" * 40)
             success = run_business_logic_tests()
 
-        elif choice == 10:
+        elif choice == 13:
             print("🚀  Starting Complete Test Suite...")
             print("=" * 40)
             success = run_all_tests()
 
-        elif choice == 11:
+        elif choice == 14:
             print("👋 Goodbye!")
             break
 
