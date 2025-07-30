@@ -112,15 +112,5 @@ async def root(request: Request):
         },
     }
 
-# Optional: Manual trigger endpoint for testing
-@app.post("/admin/trigger-update")
-async def trigger_update():
-    """Manually trigger a database update (for testing)"""
-    if project_updater and not project_updater.updating:
-        project_updater.update_distributors_transactions()
-        return {"message": "Update triggered successfully"}
-    else:
-        return {"message": "Update already in progress or updater not available"}
-
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
